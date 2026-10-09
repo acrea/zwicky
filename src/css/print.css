@@ -1,0 +1,206 @@
+/* zwicky. print / PDF (§5.7). The print view (.print-root) is built by print.js. */
+
+@page {
+  size: landscape;
+  margin: 12mm;
+}
+
+/* laid out off-screen so option paths can be measured before printing */
+.print-root {
+  position: absolute;
+  left: -100000px;
+  top: 0;
+  width: max-content;
+  background: var(--bg);
+  color: var(--ink);
+}
+.print-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  width: max-content;
+  padding-bottom: var(--space-4);
+}
+.print-block {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.print-head {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.print-head .wordmark {
+  font-size: var(--fs-lg);
+}
+.print-doc {
+  font-family: var(--font-display);
+  font-weight: var(--title-weight);
+  font-size: var(--fs-lg);
+}
+.print-section-name {
+  margin-left: auto;
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+.print-root .section-title,
+.print-root .empty-state {
+  position: static;
+  padding-left: 0;
+  font-size: var(--fs-lg);
+}
+.print-note {
+  margin: 0;
+  white-space: pre-wrap;
+  font-size: var(--fs-band);
+  line-height: var(--lh-tight);
+}
+.note-band.intro .print-note {
+  font-size: var(--fs-md);
+  color: var(--ink-muted);
+  font-style: italic;
+}
+.print-root .grid-canvas {
+  padding: 0;
+  min-width: 0;
+}
+.print-root .cell,
+.print-root .ecell {
+  cursor: default;
+}
+.print-root .cell.dim,
+.print-root .eval-table .sticky {
+  position: relative;
+  left: auto;
+}
+.print-root .cell.dim {
+  padding-left: var(--cell-pad-x);
+}
+.print-root .cell.dim .coord {
+  left: 5px;
+}
+.print-root .eval-table .corner,
+.print-root .eval-table .row-head,
+.print-root .eval-table .crit-col {
+  padding-left: var(--cell-pad-x);
+}
+.print-root .rating-table .weight-col {
+  left: auto;
+}
+.print-root .opt-head-btn {
+  cursor: default;
+}
+.fn {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  line-height: 1;
+  font-weight: 600;
+  color: var(--ink);
+}
+/* bands, legends and footnotes take the width of the grid instead of widening the section */
+.print-section > .note-band,
+.print-section > .print-legend,
+.print-section > .footnotes {
+  width: 0;
+  min-width: 100%;
+}
+.footnotes {
+  margin: 0;
+  padding-left: 2.2em;
+  columns: 2 320px;
+  column-gap: var(--space-6);
+  font-family: var(--font-body);
+  font-size: var(--fs-note);
+  line-height: var(--lh-body);
+}
+.footnotes li {
+  break-inside: avoid;
+  margin-bottom: 3px;
+}
+.footnotes li::marker {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  font-weight: 600;
+}
+.fn-ref {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  color: var(--ink-muted);
+  margin-right: 6px;
+}
+.fn-title {
+  font-weight: 600;
+  margin-right: 6px;
+}
+.fn-text {
+  white-space: pre-wrap;
+}
+.print-legend {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+}
+.print-legend li {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.print-legend li.active .legend-title {
+  font-weight: 700;
+}
+.print-legend .id {
+  font-family: var(--font-mono);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+.legend-note {
+  color: var(--ink-muted);
+  font-style: italic;
+}
+
+@media print {
+  html,
+  body {
+    height: auto;
+    background: var(--bg);
+  }
+  * {
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  body > *:not(.print-root) {
+    display: none !important;
+  }
+  .print-root {
+    position: static;
+    width: auto;
+  }
+  .print-section + .print-section {
+    break-before: page;
+  }
+  .print-root .row,
+  .print-root tr,
+  .print-head,
+  .print-block {
+    break-inside: avoid;
+  }
+  .print-root .section-title {
+    break-after: avoid;
+  }
+  .print-root .seg,
+  .print-root .step {
+    display: none;
+  }
+}

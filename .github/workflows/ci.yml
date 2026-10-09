@@ -1,0 +1,44 @@
+# Tests and build check on every pull request and push to main.
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Unit tests
+        run: node --test
+      - name: Committed build matches the source
+        run: |
+          node build.mjs
+          git diff --exit-code -- dist/ || {
+            echo "::error::dist/zwicky.html is out of date. Run 'node build.mjs' and commit the result."
+            exit 1
+          }
+
+  browser:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Install Playwright with Chromium
+        run: |
+          npm install --global playwright@1.56.1
+          playwright install --with-deps chromium
+      - name: Browser checks on dist/zwicky.html
+        run: |
+          node build.mjs
+          node tests/e2e.mjs

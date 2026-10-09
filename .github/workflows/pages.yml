@@ -1,0 +1,72 @@
+# Publishes dist/zwicky.html to GitHub Pages, only for full releases.
+#
+#   - Pushes and merges to main never deploy.
+#   - A release marked "pre-release" (e.g. v1.1.0-rc.1) is skipped.
+#   - A published release vX.Y.Z deploys, after the tests pass and the tag
+#     matches the VERSION file.
+#   - "Run workflow" (manual) re-deploys an existing release tag, e.g. to roll back.
+name: Pages
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to deploy (e.g. v1.0.0)
+        required: true
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: ${{ github.event_name == 'workflow_dispatch' || !github.event.release.prerelease }}
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ env.TAG }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Tag matches VERSION
+        run: |
+          version="$(node build.mjs --version)"
+          if [ "$TAG" != "v$version" ]; then
+            echo "::error::Tag $TAG does not match VERSION ($version). Expected v$version."
+            exit 1
+          fi
+          case "$version" in *-*)
+            echo "::error::$version is a pre-release version; only full releases are deployed."
+            exit 1
+          esac
+      - name: Unit tests
+        run: node --test
+      - name: Committed build matches the source
+        run: |
+          node build.mjs
+          git diff --exit-code -- dist/
+      - name: Assemble the site
+        run: |
+          mkdir site
+          cp dist/zwicky.html site/index.html
+          cp dist/zwicky.html site/zwicky.html
+          touch site/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - id: deployment
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,91 @@
+/* Theme "DM" — Dennis's personal theme, derived from his slide deck (§5.3).
+ * Editorial black and white, generous whitespace, serif type, few confident accents.
+ * The only theme: change the look by editing these tokens; components use tokens only. */
+
+:root {
+  /* surfaces */
+  --bg: #ffffff;
+  --bg-chrome: #fafaf8;
+  --bg-subtle: #f1f1ee;
+  --bg-band: #eeeeee;
+  --surface: #ffffff;
+
+  /* ink */
+  --ink: #111111;
+  --ink-muted: #555555;
+  --ink-faint: #8a8a8a;
+  --ink-on-accent: #ffffff;
+
+  /* lines */
+  --rule: #e2e2e2;
+  --rule-strong: #111111;
+  --rule-dim: #cfcfcf;
+
+  /* accents */
+  --accent: #1a8c9e;
+  --accent-tint: color-mix(in srgb, #1a8c9e 12%, transparent);
+  --focus-ring: 0 0 0 3px color-mix(in srgb, #1a8c9e 38%, transparent);
+  --link: #167a8a; /* teal darkened to reach 4.5:1 as text */
+  --tab-indicator: #1a8c9e;
+  --danger: #b03a3a;
+  --danger-bg: #f4c7c7;
+  --warning: #e08a00;
+  --note-marker: #555555;
+
+  /* marks */
+  --mark-focus-bg: color-mix(in srgb, #1a8c9e 13%, transparent);
+  --mark-out-ink: #8a8a8a;
+  --heat-ink: #1a8c9e; /* heatmap: single hue, tinted by score */
+
+  /* options: distinct on white, roughly colour-blind-aware. --on-option-N is the
+   * text colour on that option (numbers in markers), chosen for >= 4.5:1. */
+  --option-1: #1a8c9e; /* teal */
+  --option-2: #d4006f; /* magenta */
+  --option-3: #e08a00; /* orange */
+  --option-4: #2f5fd0; /* blue */
+  --option-5: #3a9a5b; /* green */
+  --option-6: #8a4fc7; /* purple */
+  --option-7: #c9472b; /* vermillion */
+  --option-8: #6b7785; /* slate */
+  --on-option-1: #111111;
+  --on-option-2: #ffffff;
+  --on-option-3: #111111;
+  --on-option-4: #ffffff;
+  --on-option-5: #111111;
+  --on-option-6: #ffffff;
+  --on-option-7: #ffffff;
+  --on-option-8: #ffffff;
+  --option-tint-strength: 14%;
+
+  /* type. UI controls use a neutral system sans: Lora felt too fussy at button
+   * size, while content (cells, notes, dimension titles) stays in Lora. */
+  --font-display: 'Playfair Display', Georgia, 'Times New Roman', serif;
+  --font-body: 'Lora', Georgia, 'Times New Roman', serif;
+  --font-ui: system-ui, -apple-system, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Source Code Pro', ui-monospace, Menlo, Consolas, monospace;
+  --fs-xs: 12px;
+  --fs-sm: 13px;
+  --fs-md: 14px;
+  --fs-lg: 19px;
+  --fs-xl: 24px;
+  --fs-note: 12.5px;
+  --fs-band: 17px;
+  --fs-wordmark: 28px;
+  --lh-tight: 1.35;
+  --lh-body: 1.45;
+  --wordmark-weight: 800;
+  --wordmark-tracking: -0.01em;
+  --wordmark-dot: #111111;
+  --title-weight: 700;
+  --title-tracking: 0;
+
+  /* shape */
+  --radius: 4px;
+  --band-radius: 0;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 40px;
+}
