@@ -5,7 +5,7 @@ import { parse, serialize, fileName as defaultFileName } from '../format.js';
 import { createSpace, findOption, findNode, cleanTitle, addParameter, addDimension } from '../model.js';
 import { createHistory } from '../history.js';
 import * as store from '../store.js';
-import { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt } from './grid.js';
+import { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt, moveToOtherSection } from './grid.js';
 import { drawPaths, watchPaths } from './paths.js';
 import { renderOptionsBar } from './options-bar.js';
 import { renderInspector, inspectedKey, field } from './inspector.js';
@@ -219,13 +219,20 @@ app.setView = (patch) => {
   app.render();
 };
 
+function cursorPos(section, sel) {
+  let pos = null;
+  gridLayout(app.space, section).forEach((row, r) => row.forEach((x, c) => selKey(x) === selKey(sel) && (pos = [r, c])));
+  return pos;
+}
+
 app.deleteCursor = (section) => {
   const sel = app.state.cursor[section];
-  if (!sel) return;
-  const rows = gridLayout(app.space, section);
-  let pos = null;
-  rows.forEach((row, r) => row.forEach((x, c) => selKey(x) === selKey(sel) && (pos = [r, c])));
-  deleteAt(app, section, sel, pos);
+  if (sel) deleteAt(app, section, sel, cursorPos(section, sel));
+};
+
+app.moveCursorDimension = (section) => {
+  const sel = app.state.cursor[section];
+  if (sel) moveToOtherSection(app, section, sel, cursorPos(section, sel));
 };
 
 // ---------------------------------------------------------------- inline editing

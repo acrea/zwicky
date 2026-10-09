@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { parse } from '../src/js/format.js';
+import { parse, serialize } from '../src/js/format.js';
 import {
   createSpace,
   addDimension,
@@ -29,6 +29,8 @@ import {
   nodeHasContent,
   clampAllScores,
   clone,
+  moveDimensionToSection,
+  moveLosses,
 } from '../src/js/model.js';
 
 const car = () => parse(readFileSync(new URL('../examples/car-concept.zwicky.md', import.meta.url), 'utf8')).space;
@@ -272,4 +274,53 @@ test('clone is deep and JSON-safe', () => {
   assert.deepEqual(c, s);
   c.solution.dims[0].children[0].title = 'changed';
   assert.notEqual(s.solution.dims[0].children[0].title, 'changed');
+});
+
+// ---------------------------------------------------------------- moving dimensions between sections
+
+test('a solution dimension moves to the problem with its parameters and notes; picks are dropped', () => {
+  const s = car();
+  const drive = s.solution.dims[1];
+  drive.note = 'How the car is powered.';
+  drive.children[3].note = 'Petrol and electric.';
+  drive.children[3].tags.push('later');
+  const titles = drive.children.map((p) => p.title);
+  const solutionTitles = s.solution.dims.map((d) => d.title).filter((t) => t !== 'Drivetrain');
+  assert.deepEqual(moveLosses(drive), { marks: 0, picks: 3 });
+  assert.equal(moveDimensionToSection(s, drive.uid, 'problem'), drive);
+  assert.deepEqual(s.solution.dims.map((d) => d.title), solutionTitles);
+  assert.equal(s.problem.dims.at(-1), drive);
+  assert.deepEqual(drive.children.map((p) => p.title), titles);
+  assert.equal(drive.note, 'How the car is powered.');
+  assert.equal(drive.children[3].note, 'Petrol and electric.');
+  assert.deepEqual(drive.children[3].tags, ['later']);
+  assert.ok(drive.children.every((p) => p.picks.length === 0));
+  assert.deepEqual(optionProfile(s, 1).map((r) => r.dim.title), solutionTitles);
+  assert.equal(findNode(s, drive.uid).section, 'problem');
+  // the file reflects the move and parses back the same
+  const md = serialize(s);
+  assert.match(md, /# Problem[\s\S]*## Drivetrain[\s\S]*# Solution/);
+  assert.deepEqual(serialize(parse(md).space), md);
+});
+
+test('a problem dimension moves to the solution; marks are dropped', () => {
+  const s = car();
+  const market = s.problem.dims[0];
+  assert.deepEqual(moveLosses(market), { marks: 2, picks: 0 });
+  moveDimensionToSection(s, market.uid, 'solution');
+  assert.equal(s.problem.dims.includes(market), false);
+  assert.equal(s.solution.dims.at(-1), market);
+  assert.ok(market.children.every((p) => p.mark === null));
+  assert.deepEqual(moveLosses(market), { marks: 0, picks: 0 });
+});
+
+test('moving a dimension to its own section, a parameter or an unknown uid does nothing', () => {
+  const s = car();
+  const before = clone(s);
+  const dim = s.problem.dims[0];
+  assert.equal(moveDimensionToSection(s, dim.uid, 'problem'), null);
+  assert.equal(moveDimensionToSection(s, dim.children[0].uid, 'solution'), null);
+  assert.equal(moveDimensionToSection(s, 'nope', 'solution'), null);
+  assert.equal(moveDimensionToSection(s, dim.uid, 'options'), null);
+  assert.deepEqual(s, before);
 });

@@ -202,6 +202,41 @@ export function moveParameter(space, paramUid, toDimUid, toIndex) {
   return true;
 }
 
+/**
+ * What moving a dimension to the other grid section would drop: problem marks
+ * (focus / out) going to the solution, option picks going to the problem.
+ */
+export function moveLosses(dim) {
+  let marks = 0;
+  let picks = 0;
+  for (const { node } of walk(dim.children)) {
+    if (node.kind !== 'param') continue;
+    if (node.mark) marks += 1;
+    picks += node.picks.length;
+  }
+  return { marks, picks };
+}
+
+/**
+ * Moves a top-level dimension, with its parameters and notes, to the end of the
+ * other grid section. Marks are dropped going to the solution, picks going to
+ * the problem. Returns the dimension, or null if nothing moved.
+ */
+export function moveDimensionToSection(space, dimUid, toSection) {
+  const found = findNode(space, dimUid);
+  if (!found || found.node.kind !== 'dim' || found.parent) return null;
+  if (!GRID_SECTIONS.includes(toSection) || found.section === toSection) return null;
+  const dim = found.node;
+  found.siblings.splice(found.index, 1);
+  for (const { node } of walk(dim.children)) {
+    if (node.kind !== 'param') continue;
+    if (toSection === 'solution') node.mark = null;
+    else node.picks = [];
+  }
+  space[toSection].dims.push(dim);
+  return dim;
+}
+
 /** Sets a problem mark; setting the current mark again clears it. */
 export function toggleMark(param, mark) {
   if (!MARKS.includes(mark)) return;

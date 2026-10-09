@@ -27,6 +27,7 @@ Every item (dimension, parameter, option, criterion, rating) can hold a plain-te
 | Esc | Cancel editing, leave pick mode |
 | Delete | Delete the selected item (asks first if it has a note or picks) |
 | Alt + ↑ ↓ / ← → | Move a dimension or criterion / a parameter |
+| M | Move the selected dimension between the problem and the solution space |
 | F, X | Problem: mark focus / out of scope |
 | 1 – 9 | Solution: toggle the pick of O1 – O9. Evaluation: set a score or weight |
 | Space | Pick mode: toggle the pick of the active option |

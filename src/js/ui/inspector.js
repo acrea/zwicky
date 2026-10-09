@@ -173,6 +173,14 @@ function nodeInspector(app, { kind, found, section }) {
     h(
       'div',
       { class: 'insp-actions' },
+      kind === 'dim'
+        ? h(
+            'button',
+            { class: 'btn', title: 'Move this dimension and its parameters to the other space', onclick: () => app.moveCursorDimension(section) },
+            section === 'problem' ? 'Move to Solution' : 'Move to Problem',
+            h('kbd', null, 'M'),
+          )
+        : null,
       h('button', { class: 'btn danger-quiet', onclick: () => app.deleteCursor(section) }, kind === 'dim' ? 'Delete dimension' : 'Delete parameter'),
     ),
   );
