@@ -830,6 +830,9 @@ textarea.field-input {
   flex-wrap: wrap;
   gap: var(--space-2);
 }
+.insp-actions .btn kbd {
+  margin-left: var(--space-2);
+}
 .btn {
   border-color: var(--rule);
   background: var(--surface);

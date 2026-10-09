@@ -2,12 +2,14 @@
 // Rows are dimensions (sticky title column), cells are parameters, a ghost "+"
 // cell ends every row and a ghost "+ Dimension" row ends the grid.
 
-import { h, s } from './dom.js';
+import { h, s, isMac } from './dom.js';
 import {
   parametersOf,
   findNode,
   removeNode,
   moveNode,
+  moveDimensionToSection,
+  moveLosses,
   moveParameter,
   nodeHasContent,
   toggleMark,
@@ -460,6 +462,11 @@ export function gridKeydown(app, section, e) {
   }
 
   const key = e.key.toLowerCase();
+  if (key === 'm' && !e.shiftKey) {
+    if (sel.type === 'dim') moveToOtherSection(app, section, sel, pos);
+    else app.toast('Select a dimension (its row title) to move it with M.');
+    return true;
+  }
   if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x')) {
     const { node } = findNode(space, sel.uid);
     app.change(() => toggleMark(node, key === 'f' ? 'focus' : 'out'));
@@ -495,4 +502,37 @@ export async function deleteAt(app, section, sel, pos) {
   app.change(() => removeNode(app.space, sel.uid));
   const [r, c] = pos || [0, 0];
   app.setCursor(section, fixCursor(app.space, section, null, sel.type === 'dim' ? [r, 0] : [r, c]));
+}
+
+export const otherSection = (section) => (section === 'problem' ? 'solution' : 'problem');
+const SECTION_NAMES = { problem: 'problem space', solution: 'solution space' };
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Moves the selected dimension to the other grid section, then shows it there.
+ * Asks first when marks (to the solution) or picks (to the problem) would be dropped.
+ */
+export async function moveToOtherSection(app, section, sel, pos) {
+  if (sel.type !== 'dim') return;
+  const found = findNode(app.space, sel.uid);
+  if (!found) return;
+  const to = otherSection(section);
+  const name = `“${found.node.title || 'Untitled'}”`;
+  const { marks, picks } = moveLosses(found.node);
+  const lost =
+    to === 'solution' && marks
+      ? `${plural(marks, 'focus / out-of-scope mark is', 'focus / out-of-scope marks are')} removed, because the solution space has no marks.`
+      : to === 'problem' && picks
+        ? `${plural(picks, 'pick by an option is', 'picks by options are')} removed, because the problem space has no picks. Ratings stay as they are.`
+        : '';
+  if (lost) {
+    const ok = await app.confirm(`Move ${name} to the ${SECTION_NAMES[to]}?`, `${lost} You can undo this.`, 'Move');
+    if (!ok) return;
+  }
+  app.change(() => moveDimensionToSection(app.space, sel.uid, to));
+  const [r] = pos || [0, 0];
+  app.state.cursor[section] = fixCursor(app.space, section, null, [r, 0]);
+  app.state.cursor[to] = { type: 'dim', uid: sel.uid };
+  app.setTab(to);
+  app.toast(`Moved ${name} to the ${SECTION_NAMES[to]}. ${isMac() ? '⌘Z' : 'Ctrl+Z'} undoes it.`);
 }

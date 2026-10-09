@@ -340,6 +340,51 @@ await check('save falls back to a download with the canonical file', async () =>
   assert.equal(await page.locator('.status.dirty').count(), 0);
 });
 
+await check('M moves a problem dimension to the solution; a confirm names the dropped marks; undo restores', async () => {
+  await page.click('#tab-problem');
+  const before = await space();
+  const market = before.problem.dims.find((d) => d.title === 'Market');
+  assert.ok(market.children.some((p) => p.mark), 'Market has marks to drop');
+  const dim = (title) => page.locator('.cell.dim', { has: page.locator('.title', { hasText: new RegExp(`^${title}$`) }) });
+  await dim('Market').click();
+  await page.keyboard.press('m');
+  await page.locator('dialog[open]').waitFor();
+  assert.match(await page.locator('dialog[open]').innerText(), /marks? (is|are) removed/);
+  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.waitForFunction(() => window.zwicky.space.solution.dims.at(-1).title === 'Market');
+  const s = await space();
+  assert.equal(s.problem.dims.some((d) => d.title === 'Market'), false);
+  assert.equal(s.solution.dims.at(-1).title, 'Market');
+  assert.ok(s.solution.dims.at(-1).children.every((p) => p.mark === null));
+  assert.equal(await page.getAttribute('#tab-solution', 'aria-selected'), 'true');
+  assert.ok(await dim('Market').evaluate((el) => el.classList.contains('selected') || el.getAttribute('aria-selected') === 'true'));
+  await page.keyboard.press('Control+z');
+  assert.deepEqual((await space()).problem, before.problem);
+  assert.deepEqual((await space()).solution, before.solution);
+});
+
+await check('the inspector moves a solution dimension to the problem; cancel keeps it, picks are dropped on confirm', async () => {
+  await page.click('#tab-solution');
+  const dim = (title) => page.locator('.cell.dim', { has: page.locator('.title', { hasText: new RegExp(`^${title}$`) }) });
+  await dim('Drivetrain').click();
+  await page.getByRole('button', { name: /Move to Problem/ }).click();
+  await page.locator('dialog[open]').waitFor();
+  assert.match(await page.locator('dialog[open]').innerText(), /picks? by (an option|options) (is|are) removed/);
+  await page.keyboard.press('Escape');
+  await page.locator('dialog[open]').waitFor({ state: 'detached' });
+  assert.ok((await space()).solution.dims.some((d) => d.title === 'Drivetrain'));
+  await page.getByRole('button', { name: /Move to Problem/ }).click();
+  await page.getByRole('button', { name: 'Move', exact: true }).click();
+  await page.waitForFunction(() => window.zwicky.space.problem.dims.at(-1).title === 'Drivetrain');
+  const s = await space();
+  const moved = s.problem.dims.at(-1);
+  assert.equal(moved.title, 'Drivetrain');
+  assert.ok(moved.children.every((p) => p.picks.length === 0));
+  assert.match(await md(), /# Problem[\s\S]*## Drivetrain[\s\S]*# Solution/);
+  await page.keyboard.press('Control+z');
+  assert.ok((await space()).solution.dims.some((d) => d.title === 'Drivetrain'));
+});
+
 await check('every example opens without a report and saves back byte-identically (apart from updated)', async () => {
   for (const name of ['car-concept.zwicky.md', 'slide-generator.zwicky.md']) {
     const fixture = readFileSync(new URL('../examples/' + name, import.meta.url), 'utf8');

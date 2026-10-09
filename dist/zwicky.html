@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-yhdxCkCW1BpiM3KM+dnJU8bKnlyLqQrb/5vQCPjlGg4='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-b2mv/0BEd3rb+z9LwFwo/rnEOBmezbBRjpkY351ljX8='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>zwicky.</title>
     <meta name="description" content="Span a problem space and a solution space, compose options, rate them against criteria. Runs entirely in your browser." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Ctext x='7' y='24' font-family='Georgia,serif' font-weight='700' font-size='22' fill='%23fff'%3Ez%3C/text%3E%3Ccircle cx='25' cy='22' r='2.6' fill='%231A8C9E'/%3E%3C/svg%3E" />
@@ -1009,6 +1009,9 @@ textarea.field-input {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+}
+.insp-actions .btn kbd {
+  margin-left: var(--space-2);
 }
 .btn {
   border-color: var(--rule);
@@ -2183,6 +2186,41 @@ function moveParameter(space, paramUid, toDimUid, toIndex) {
   return true;
 }
 
+/**
+ * What moving a dimension to the other grid section would drop: problem marks
+ * (focus / out) going to the solution, option picks going to the problem.
+ */
+function moveLosses(dim) {
+  let marks = 0;
+  let picks = 0;
+  for (const { node } of walk(dim.children)) {
+    if (node.kind !== 'param') continue;
+    if (node.mark) marks += 1;
+    picks += node.picks.length;
+  }
+  return { marks, picks };
+}
+
+/**
+ * Moves a top-level dimension, with its parameters and notes, to the end of the
+ * other grid section. Marks are dropped going to the solution, picks going to
+ * the problem. Returns the dimension, or null if nothing moved.
+ */
+function moveDimensionToSection(space, dimUid, toSection) {
+  const found = findNode(space, dimUid);
+  if (!found || found.node.kind !== 'dim' || found.parent) return null;
+  if (!GRID_SECTIONS.includes(toSection) || found.section === toSection) return null;
+  const dim = found.node;
+  found.siblings.splice(found.index, 1);
+  for (const { node } of walk(dim.children)) {
+    if (node.kind !== 'param') continue;
+    if (toSection === 'solution') node.mark = null;
+    else node.picks = [];
+  }
+  space[toSection].dims.push(dim);
+  return dim;
+}
+
 /** Sets a problem mark; setting the current mark again clears it. */
 function toggleMark(param, mark) {
   if (!MARKS.includes(mark)) return;
@@ -2392,7 +2430,7 @@ function scoreFraction(score, scale) {
   const span = scale.max - scale.min;
   return span > 0 ? Math.max(0, Math.min(1, (score - scale.min) / span)) : 0;
 }
-return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, GRID_SECTIONS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, optionColour, rowLetter, coordinate, parametersOf, walk, findNode, findOption, findCriterion, addDimension, addParameter, removeNode, moveNode, moveParameter, toggleMark, nodeHasContent, isPicked, togglePick, optionProfile, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
+return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, GRID_SECTIONS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, optionColour, rowLetter, coordinate, parametersOf, walk, findNode, findOption, findCriterion, addDimension, addParameter, removeNode, moveNode, moveParameter, moveLosses, moveDimensionToSection, toggleMark, nodeHasContent, isPicked, togglePick, optionProfile, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
 })();
 
 // ---- format.js
@@ -3361,8 +3399,8 @@ __m["ui/grid.js"] = (() => {
 // Rows are dimensions (sticky title column), cells are parameters, a ghost "+"
 // cell ends every row and a ghost "+ Dimension" row ends the grid.
 
-const { h, s } = __m["ui/dom.js"];
-const { parametersOf, findNode, removeNode, moveNode, moveParameter, nodeHasContent, toggleMark, togglePick, findOption, optionColour, coordinate, rowLetter } = __m["model.js"];
+const { h, s, isMac } = __m["ui/dom.js"];
+const { parametersOf, findNode, removeNode, moveNode, moveDimensionToSection, moveLosses, moveParameter, nodeHasContent, toggleMark, togglePick, findOption, optionColour, coordinate, rowLetter } = __m["model.js"];
 
 // ---------------------------------------------------------------- cursor
 
@@ -3806,6 +3844,11 @@ function gridKeydown(app, section, e) {
   }
 
   const key = e.key.toLowerCase();
+  if (key === 'm' && !e.shiftKey) {
+    if (sel.type === 'dim') moveToOtherSection(app, section, sel, pos);
+    else app.toast('Select a dimension (its row title) to move it with M.');
+    return true;
+  }
   if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x')) {
     const { node } = findNode(space, sel.uid);
     app.change(() => toggleMark(node, key === 'f' ? 'focus' : 'out'));
@@ -3842,7 +3885,40 @@ async function deleteAt(app, section, sel, pos) {
   const [r, c] = pos || [0, 0];
   app.setCursor(section, fixCursor(app.space, section, null, sel.type === 'dim' ? [r, 0] : [r, c]));
 }
-return { gridLayout, selKey, fixCursor, optionStyle, optionVars, renderGrid, NAV_KEYS, gridKeydown, deleteAt };
+
+const otherSection = (section) => (section === 'problem' ? 'solution' : 'problem');
+const SECTION_NAMES = { problem: 'problem space', solution: 'solution space' };
+const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+
+/**
+ * Moves the selected dimension to the other grid section, then shows it there.
+ * Asks first when marks (to the solution) or picks (to the problem) would be dropped.
+ */
+async function moveToOtherSection(app, section, sel, pos) {
+  if (sel.type !== 'dim') return;
+  const found = findNode(app.space, sel.uid);
+  if (!found) return;
+  const to = otherSection(section);
+  const name = `“${found.node.title || 'Untitled'}”`;
+  const { marks, picks } = moveLosses(found.node);
+  const lost =
+    to === 'solution' && marks
+      ? `${plural(marks, 'focus / out-of-scope mark is', 'focus / out-of-scope marks are')} removed, because the solution space has no marks.`
+      : to === 'problem' && picks
+        ? `${plural(picks, 'pick by an option is', 'picks by options are')} removed, because the problem space has no picks. Ratings stay as they are.`
+        : '';
+  if (lost) {
+    const ok = await app.confirm(`Move ${name} to the ${SECTION_NAMES[to]}?`, `${lost} You can undo this.`, 'Move');
+    if (!ok) return;
+  }
+  app.change(() => moveDimensionToSection(app.space, sel.uid, to));
+  const [r] = pos || [0, 0];
+  app.state.cursor[section] = fixCursor(app.space, section, null, [r, 0]);
+  app.state.cursor[to] = { type: 'dim', uid: sel.uid };
+  app.setTab(to);
+  app.toast(`Moved ${name} to the ${SECTION_NAMES[to]}. ${isMac() ? '⌘Z' : 'Ctrl+Z'} undoes it.`);
+}
+return { gridLayout, selKey, fixCursor, optionStyle, optionVars, renderGrid, NAV_KEYS, gridKeydown, deleteAt, otherSection, moveToOtherSection };
 })();
 
 // ---- ui/paths.js
@@ -4087,6 +4163,7 @@ const SHORTCUTS = [
   ['Delete', 'Delete the selected item'],
   ['Alt + ↑ ↓', 'Move a dimension'],
   ['Alt + ← →', 'Move a parameter'],
+  ['M', 'Move a dimension to the other space'],
   ['F, X', 'Problem: mark focus / out of scope'],
   ['1 – 9', 'Solution: toggle pick for O1 – O9'],
   ['Space', 'Pick mode: toggle pick'],
@@ -4267,6 +4344,14 @@ function nodeInspector(app, { kind, found, section }) {
     h(
       'div',
       { class: 'insp-actions' },
+      kind === 'dim'
+        ? h(
+            'button',
+            { class: 'btn', title: 'Move this dimension and its parameters to the other space', onclick: () => app.moveCursorDimension(section) },
+            section === 'problem' ? 'Move to Solution' : 'Move to Problem',
+            h('kbd', null, 'M'),
+          )
+        : null,
       h('button', { class: 'btn danger-quiet', onclick: () => app.deleteCursor(section) }, kind === 'dim' ? 'Delete dimension' : 'Delete parameter'),
     ),
   );
@@ -5318,7 +5403,7 @@ return { FORMAT_DOC };
 
 // ---- version.js
 __m["version.js"] = (() => {
-const APP_VERSION = "1.0.0";
+const APP_VERSION = "1.1.0";
 return { APP_VERSION };
 })();
 
@@ -5331,7 +5416,7 @@ const { parse, serialize, fileName: defaultFileName } = __m["format.js"];
 const { createSpace, findOption, findNode, cleanTitle, addParameter, addDimension } = __m["model.js"];
 const { createHistory } = __m["history.js"];
 const store = __m["store.js"];
-const { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt } = __m["ui/grid.js"];
+const { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt, moveToOtherSection } = __m["ui/grid.js"];
 const { drawPaths, watchPaths } = __m["ui/paths.js"];
 const { renderOptionsBar } = __m["ui/options-bar.js"];
 const { renderInspector, inspectedKey, field } = __m["ui/inspector.js"];
@@ -5536,13 +5621,20 @@ app.setView = (patch) => {
   app.render();
 };
 
+function cursorPos(section, sel) {
+  let pos = null;
+  gridLayout(app.space, section).forEach((row, r) => row.forEach((x, c) => selKey(x) === selKey(sel) && (pos = [r, c])));
+  return pos;
+}
+
 app.deleteCursor = (section) => {
   const sel = app.state.cursor[section];
-  if (!sel) return;
-  const rows = gridLayout(app.space, section);
-  let pos = null;
-  rows.forEach((row, r) => row.forEach((x, c) => selKey(x) === selKey(sel) && (pos = [r, c])));
-  deleteAt(app, section, sel, pos);
+  if (sel) deleteAt(app, section, sel, cursorPos(section, sel));
+};
+
+app.moveCursorDimension = (section) => {
+  const sel = app.state.cursor[section];
+  if (sel) moveToOtherSection(app, section, sel, cursorPos(section, sel));
 };
 
 // ---------------------------------------------------------------- inline editing

@@ -7,6 +7,7 @@ export const SHORTCUTS = [
   ['Delete', 'Delete the selected item'],
   ['Alt + ↑ ↓', 'Move a dimension'],
   ['Alt + ← →', 'Move a parameter'],
+  ['M', 'Move a dimension to the other space'],
   ['F, X', 'Problem: mark focus / out of scope'],
   ['1 – 9', 'Solution: toggle pick for O1 – O9'],
   ['Space', 'Pick mode: toggle pick'],
