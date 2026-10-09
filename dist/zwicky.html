@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-b2mv/0BEd3rb+z9LwFwo/rnEOBmezbBRjpkY351ljX8='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-imzRLLDebF3HY+7buoVUI5odFxSIW7l244wUOLjHTVE='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>zwicky.</title>
     <meta name="description" content="Span a problem space and a solution space, compose options, rate them against criteria. Runs entirely in your browser." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Ctext x='7' y='24' font-family='Georgia,serif' font-weight='700' font-size='22' fill='%23fff'%3Ez%3C/text%3E%3Ccircle cx='25' cy='22' r='2.6' fill='%231A8C9E'/%3E%3C/svg%3E" />
@@ -120,8 +120,11 @@
   --warning: #e08a00;
   --note-marker: #555555;
 
-  /* marks */
-  --mark-focus-bg: color-mix(in srgb, #1a8c9e 13%, transparent);
+  /* stages (problem scope 1–3: strongest tint first) and marks */
+  --stage-1-bg: color-mix(in srgb, #1a8c9e 26%, transparent);
+  --stage-2-bg: color-mix(in srgb, #1a8c9e 13%, transparent);
+  --stage-3-bg: color-mix(in srgb, #1a8c9e 5%, transparent);
+  --beyond-scope-opacity: 0.35;
   --mark-out-ink: #8a8a8a;
   --heat-ink: #1a8c9e; /* heatmap: single hue, tinted by score */
 
@@ -740,12 +743,23 @@ svg.paths {
   padding-top: 10px;
 }
 
-/* states: selected, focus, out, picked */
-.cell.mark-focus {
-  background: var(--mark-focus-bg);
+/* states: selected, stages, out, picked, beyond the scope filter */
+.cell.stage-1 {
+  background: var(--stage-1-bg);
 }
-.cell.mark-focus .title {
+.cell.stage-1 .title {
   font-weight: 600;
+}
+.cell.stage-2 {
+  background: var(--stage-2-bg);
+}
+.cell.stage-3 {
+  background: var(--stage-3-bg);
+}
+.cell.beyond-scope > :not(.coord),
+.chip.beyond-scope,
+.opt-head.beyond-scope > * {
+  opacity: var(--beyond-scope-opacity);
 }
 .cell.mark-out .title {
   color: var(--mark-out-ink);
@@ -847,6 +861,9 @@ svg.paths {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--ink-muted);
+}
+.chip .stage-pill {
+  flex-shrink: 0;
 }
 .chip-title {
   overflow: hidden;
@@ -1059,6 +1076,103 @@ textarea.field-input {
 .segmented {
   display: flex;
   gap: var(--space-1);
+}
+.stage-choice {
+  flex-wrap: wrap;
+}
+.toggle.stage-1:not([aria-pressed='true']),
+.stage-pill.stage-1,
+.legend-swatch.stage-1 {
+  background: var(--stage-1-bg);
+}
+.toggle.stage-2:not([aria-pressed='true']),
+.stage-pill.stage-2,
+.legend-swatch.stage-2 {
+  background: var(--stage-2-bg);
+}
+.toggle.stage-3:not([aria-pressed='true']),
+.stage-pill.stage-3,
+.legend-swatch.stage-3 {
+  background: var(--stage-3-bg);
+}
+.stage-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.stage-toggle[aria-pressed='true'] kbd {
+  background: transparent;
+  color: inherit;
+  border-color: currentColor;
+}
+.stage-pill {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.stage-names {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.stage-names .field-label {
+  font-size: var(--fs-xs);
+}
+
+/* legend and scope filter above the grids */
+.legend-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+.legend strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-swatch {
+  width: 16px;
+  height: 11px;
+  border: 1px solid var(--rule);
+}
+.legend-out {
+  color: var(--mark-out-ink);
+  text-decoration: line-through;
+}
+.eval-bar .scope-filter {
+  margin-left: var(--space-4);
+}
+.scope-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.scope-filter .toggle {
+  font-size: var(--fs-xs);
 }
 .mark-toggle {
   display: inline-flex;
@@ -1413,6 +1527,10 @@ textarea.field-input {
   text-align: left;
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
+}
+.opt-head > .stage-pill {
+  display: table;
+  margin: -4px 0 8px var(--cell-pad-x);
 }
 .opt-head-btn:hover {
   background: var(--bg-subtle);
@@ -1988,17 +2106,22 @@ __m["model.js"] = (() => {
 // Shape (plain JSON, so history can snapshot it):
 //
 //   space = {
-//     meta:      { title, scale: { min, max }, updated, extra: [[key, value], …] },
+//     meta:      { title, scale: { min, max }, stages: [name × 3], updated, extra: [[key, value], …] },
 //     problem:   { note, dims: [Dimension] },
 //     solution:  { note, dims: [Dimension] },
-//     options:   { note, items: [{ uid, id, title, note, tags }] },
+//     options:   { note, items: [{ uid, id, title, note, stage, tags }] },
 //     criteria:  { note, items: [{ uid, id, title, note, weight, tags }] },
 //     ratings:   { note, cells: { O1: { C1: { score, note, tags } } } },
 //     passthrough: [line, …],          // the "# Notes" section, verbatim
 //   }
 //
 //   Dimension = { uid, kind: 'dim', title, note, tags, children: [Parameter | Dimension] }
-//   Parameter = { uid, kind: 'param', title, note, mark, picks: [optionId], tags }
+//   Parameter = { uid, kind: 'param', title, note, stage, mark, picks: [optionId], tags }
+//
+// Stages scope the problem in steps: stage 1 is where you start, stage 2 and 3
+// widen the scope, and each includes the ones before it. A problem parameter
+// has a stage (1–3) or the mark 'out' (out of scope), never both. An option
+// has the stage of the problem it addresses. `null` means none.
 //
 // The model is a tree (§4.7): a dimension's children may in future hold
 // sub-dimensions. v1 only ever creates parameters directly under dimensions.
@@ -2010,7 +2133,9 @@ const WEIGHT_MIN = 0;
 const WEIGHT_MAX = 10;
 const DEFAULT_WEIGHT = 1;
 const OPTION_COLOURS = 8;
-const MARKS = ['focus', 'out'];
+const MARKS = ['out'];
+const STAGES = [1, 2, 3];
+const DEFAULT_STAGE_NAMES = Object.freeze(['Horizon 1', 'Horizon 2', 'Horizon 3']);
 const GRID_SECTIONS = ['problem', 'solution'];
 
 let uidCounter = 0;
@@ -2037,7 +2162,7 @@ function cleanTitle(title) {
 
 function createSpace(title = '') {
   return {
-    meta: { title, scale: { ...DEFAULT_SCALE }, updated: '', extra: [] },
+    meta: { title, scale: { ...DEFAULT_SCALE }, stages: [...DEFAULT_STAGE_NAMES], updated: '', extra: [] },
     problem: { note: '', dims: [] },
     solution: { note: '', dims: [] },
     options: { note: '', items: [] },
@@ -2052,11 +2177,11 @@ function createDimension(title = '', note = '') {
 }
 
 function createParameter(title = '', note = '') {
-  return { uid: uid(), kind: 'param', title, note, mark: null, picks: [], tags: [] };
+  return { uid: uid(), kind: 'param', title, note, stage: null, mark: null, picks: [], tags: [] };
 }
 
 function createOption(id, title = '', note = '') {
-  return { uid: uid(), id, title, note, tags: [] };
+  return { uid: uid(), id, title, note, stage: null, tags: [] };
 }
 
 function createCriterion(id, title = '', note = '', weight = DEFAULT_WEIGHT) {
@@ -2187,15 +2312,15 @@ function moveParameter(space, paramUid, toDimUid, toIndex) {
 }
 
 /**
- * What moving a dimension to the other grid section would drop: problem marks
- * (focus / out) going to the solution, option picks going to the problem.
+ * What moving a dimension to the other grid section would drop: problem stages
+ * and marks going to the solution, option picks going to the problem.
  */
 function moveLosses(dim) {
   let marks = 0;
   let picks = 0;
   for (const { node } of walk(dim.children)) {
     if (node.kind !== 'param') continue;
-    if (node.mark) marks += 1;
+    if (node.mark || node.stage) marks += 1;
     picks += node.picks.length;
   }
   return { marks, picks };
@@ -2214,17 +2339,54 @@ function moveDimensionToSection(space, dimUid, toSection) {
   found.siblings.splice(found.index, 1);
   for (const { node } of walk(dim.children)) {
     if (node.kind !== 'param') continue;
-    if (toSection === 'solution') node.mark = null;
-    else node.picks = [];
+    if (toSection === 'solution') {
+      node.mark = null;
+      node.stage = null;
+    } else node.picks = [];
   }
   space[toSection].dims.push(dim);
   return dim;
 }
 
-/** Sets a problem mark; setting the current mark again clears it. */
+/** Sets a problem mark ('out'); setting it again clears it. A mark clears the stage. */
 function toggleMark(param, mark) {
   if (!MARKS.includes(mark)) return;
   param.mark = param.mark === mark ? null : mark;
+  if (param.mark) param.stage = null;
+}
+
+// ---------------------------------------------------------------- stages
+
+const isStage = (n) => STAGES.includes(n);
+
+/** Sets the stage of a problem parameter or an option (null clears it). A stage clears the 'out' mark. */
+function setStage(item, stage) {
+  item.stage = isStage(stage) ? stage : null;
+  if (item.stage && 'mark' in item) item.mark = null;
+}
+
+/** Cycles a stage: none → 1 → 2 → 3 → none. */
+function cycleStage(item) {
+  setStage(item, item.stage === STAGES.length ? null : (item.stage || 0) + 1);
+}
+
+/** The display name of stage 1–3 in this space. */
+function stageName(space, stage) {
+  const names = (space.meta && space.meta.stages) || DEFAULT_STAGE_NAMES;
+  return (names[stage - 1] || '').trim() || DEFAULT_STAGE_NAMES[stage - 1];
+}
+
+/** Stage names are single-line and comma-free, because the file lists them comma-separated. */
+function cleanStageName(name) {
+  return String(name ?? '')
+    .replace(/[\r\n,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Whether an item with `stage` lies within a "scope up to stage `upTo`" filter (null = no filter). */
+function inScope(stage, upTo) {
+  return !upTo || (isStage(stage) && stage <= upTo);
 }
 
 /** Deleting asks for a confirm only if the node (or a child) has a note or a pick (§3.1). */
@@ -2272,6 +2434,7 @@ function duplicateOption(space, id) {
   const source = findOption(space, id);
   if (!source) return null;
   const copy = createOption(nextId(items), source.title, source.note);
+  copy.stage = source.stage;
   copy.tags = [...source.tags];
   items.splice(items.indexOf(source) + 1, 0, copy);
   for (const { node } of walk(space.solution.dims)) {
@@ -2430,7 +2593,7 @@ function scoreFraction(score, scale) {
   const span = scale.max - scale.min;
   return span > 0 ? Math.max(0, Math.min(1, (score - scale.min) / span)) : 0;
 }
-return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, GRID_SECTIONS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, optionColour, rowLetter, coordinate, parametersOf, walk, findNode, findOption, findCriterion, addDimension, addParameter, removeNode, moveNode, moveParameter, moveLosses, moveDimensionToSection, toggleMark, nodeHasContent, isPicked, togglePick, optionProfile, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
+return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, STAGES, DEFAULT_STAGE_NAMES, GRID_SECTIONS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, optionColour, rowLetter, coordinate, parametersOf, walk, findNode, findOption, findCriterion, addDimension, addParameter, removeNode, moveNode, moveParameter, moveLosses, moveDimensionToSection, toggleMark, isStage, setStage, cycleStage, stageName, cleanStageName, inScope, nodeHasContent, isPicked, togglePick, optionProfile, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
 })();
 
 // ---- format.js
@@ -2439,7 +2602,7 @@ __m["format.js"] = (() => {
 // Tolerant reader, canonical writer. The specification is docs/FORMAT.md.
 // Pure module: no DOM, importable in Node for tests.
 
-const { FORMAT_VERSION, DEFAULT_SCALE, MARKS, createSpace, createDimension, createParameter, createOption, createCriterion, clampWeight, cleanTitle, optionKey, criterionKey } = __m["model.js"];
+const { FORMAT_VERSION, DEFAULT_SCALE, MARKS, STAGES, DEFAULT_STAGE_NAMES, cleanStageName, createSpace, createDimension, createParameter, createOption, createCriterion, clampWeight, cleanTitle, optionKey, criterionKey } = __m["model.js"];
 
 /**
  * Upgrades older files step by step before parsing. Each entry turns the text
@@ -2458,7 +2621,7 @@ const SECTION_TITLES = {
   ratings: 'Ratings',
   notes: 'Notes',
 };
-const KNOWN_META = ['zwicky', 'title', 'scale', 'updated'];
+const KNOWN_META = ['zwicky', 'title', 'scale', 'stages', 'updated'];
 const SUB_SEPARATOR = ' › ';
 
 // ---------------------------------------------------------------- helpers
@@ -2641,6 +2804,13 @@ function parseBody(lines, report, version, rawVersion) {
           space.meta.scale = { ...DEFAULT_SCALE };
           add(ln, 'warning', `Scale "${kv.value}" is not "<min>-<max>"; using ${DEFAULT_SCALE.min}-${DEFAULT_SCALE.max}.`);
         }
+      } else if (key === 'stages') {
+        const names = kv.value.split(',').map(cleanStageName);
+        if (names.length > STAGES.length)
+          add(ln, 'warning', `Only ${STAGES.length} stages are supported; "${names.slice(STAGES.length).join(', ')}" dropped.`);
+        space.meta.stages = DEFAULT_STAGE_NAMES.map((d, i) => names[i] || d);
+        if (names.slice(0, STAGES.length).some((n) => !n) || names.length < STAGES.length)
+          add(ln, 'info', `Missing stage names filled in with the defaults: ${space.meta.stages.join(', ')}.`);
       } else {
         const existing = space.meta.extra.find((e) => e[0] === key);
         if (existing) existing[1] = kv.value;
@@ -2767,7 +2937,10 @@ function parseBody(lines, report, version, rawVersion) {
         const item = section === 'options' ? createOption(null, title) : createCriterion(null, title);
         for (const tok of tokens) {
           const w = /^w=(-?\d+)$/.exec(tok);
-          if (section === 'criteria' && w) {
+          const st = /^stage=(\d+)$/.exec(tok);
+          if (section === 'options' && st && STAGES.includes(Number(st[1])) && !item.stage) {
+            item.stage = Number(st[1]);
+          } else if (section === 'criteria' && w) {
             const weight = clampWeight(Number(w[1]));
             if (weight !== Number(w[1])) add(ln, 'warning', `Weight ${w[1]} is outside 0–10; set to ${weight}.`);
             item.weight = weight;
@@ -2838,10 +3011,17 @@ function parseBody(lines, report, version, rawVersion) {
         const param = createParameter(sub ? sub.title + SUB_SEPARATOR + title : title);
         for (const tok of tokens) {
           const pick = /^O(\d+)$/.exec(tok);
-          if (section === 'problem' && MARKS.includes(tok)) {
-            if (param.mark && param.mark !== tok)
-              add(ln, 'warning', `Parameter has both "${param.mark}" and "${tok}"; kept "${param.mark}".`);
+          const focus = /^focus(?:=(\d+))?$/.exec(tok);
+          const stage = focus ? Number(focus[1] || 1) : null;
+          if (section === 'problem' && (MARKS.includes(tok) || (focus && STAGES.includes(stage)))) {
+            const current = param.stage ? stageTag(param.stage) : param.mark;
+            if (current) {
+              if (current !== tok) add(ln, 'warning', `Parameter has both "${current}" and "${tok}"; kept "${current}".`);
+            } else if (focus) param.stage = stage;
             else param.mark = tok;
+          } else if (section === 'problem' && focus) {
+            param.tags.push(tok);
+            add(ln, 'warning', `Stage ${focus[1]} does not exist (only 1–${STAGES.length}); "${tok}" kept as an unknown tag.`);
           } else if (section === 'solution' && pick) {
             const id = Number(pick[1]);
             if (pickRefs.some((r) => r.param === param && r.id === id)) add(ln, 'info', `Duplicate pick O${id} removed.`);
@@ -2971,6 +3151,11 @@ function parseBody(lines, report, version, rawVersion) {
 
 // ---------------------------------------------------------------- serialize
 
+/** The tag for a problem stage: "focus" for stage 1, "focus=2" and "focus=3" for the others. */
+function stageTag(stage) {
+  return stage === 1 ? 'focus' : 'focus=' + stage;
+}
+
 function tagGroup(tokens) {
   return tokens.length ? ' {' + tokens.join(' ') + '}' : '';
 }
@@ -2995,6 +3180,8 @@ function serialize(space) {
   if (title) out.push(`title: ${title}`);
   const scale = meta.scale || DEFAULT_SCALE;
   out.push(`scale: ${scale.min}-${scale.max}`);
+  const stages = DEFAULT_STAGE_NAMES.map((d, i) => cleanStageName((meta.stages || [])[i]) || d);
+  if (stages.some((n, i) => n !== DEFAULT_STAGE_NAMES[i])) out.push(`stages: ${stages.join(', ')}`);
   const updated = cleanValue(meta.updated);
   if (updated) out.push(`updated: ${updated}`);
   for (const [k, v] of meta.extra || []) {
@@ -3024,7 +3211,8 @@ function serialize(space) {
         continue;
       }
       const tokens = [];
-      if (key === 'problem' && MARKS.includes(c.mark)) tokens.push(c.mark);
+      if (key === 'problem' && STAGES.includes(c.stage)) tokens.push(stageTag(c.stage));
+      else if (key === 'problem' && MARKS.includes(c.mark)) tokens.push(c.mark);
       if (key === 'solution')
         for (const id of [...c.picks].sort((a, b) => a - b)) if (optionIds.has(id)) tokens.push('O' + id);
       tokens.push(...c.tags);
@@ -3049,7 +3237,7 @@ function serialize(space) {
     heading('# Options');
     note(space.options.note, '');
     for (const o of space.options.items) {
-      heading(itemLine('## O' + o.id, o.title, o.tags));
+      heading(itemLine('## O' + o.id, o.title, STAGES.includes(o.stage) ? ['stage=' + o.stage, ...o.tags] : o.tags));
       note(o.note, '');
     }
   }
@@ -3400,7 +3588,7 @@ __m["ui/grid.js"] = (() => {
 // cell ends every row and a ghost "+ Dimension" row ends the grid.
 
 const { h, s, isMac } = __m["ui/dom.js"];
-const { parametersOf, findNode, removeNode, moveNode, moveDimensionToSection, moveLosses, moveParameter, nodeHasContent, toggleMark, togglePick, findOption, optionColour, coordinate, rowLetter } = __m["model.js"];
+const { parametersOf, findNode, removeNode, moveNode, moveDimensionToSection, moveLosses, moveParameter, nodeHasContent, toggleMark, togglePick, setStage, cycleStage, stageName, inScope, findOption, optionColour, coordinate, rowLetter } = __m["model.js"];
 
 // ---------------------------------------------------------------- cursor
 
@@ -3527,14 +3715,18 @@ function renderGrid(app, section) {
       const cls = ['param', p.note && 'has-note'];
       let style = null;
       const markers = [];
-      if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
+      if (section === 'problem') {
+        if (p.stage) cls.push('stage-' + p.stage);
+        else if (p.mark) cls.push('mark-' + p.mark);
+        if (!inScope(p.stage, state.scopeUpTo)) cls.push('beyond-scope');
+      }
       if (solution) {
         if (active !== null && p.picks.includes(active)) {
           cls.push('picked');
           style = optionVars(active);
         }
         for (const o of options) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
+          if (o.id === active || !p.picks.includes(o.id) || !inScope(o.stage, state.scopeUpTo)) continue;
           const { style: ls } = optionColour(o.id);
           markers.push(
             h(
@@ -3548,8 +3740,8 @@ function renderGrid(app, section) {
       const coord = coordinate(r, c);
       const label = [
         `${coord}: ${p.title}`,
-        p.mark === 'focus' && 'focus',
-        p.mark === 'out' && 'out of scope',
+        section === 'problem' && p.stage && stageName(space, p.stage),
+        section === 'problem' && p.mark === 'out' && 'out of scope',
         solution && p.picks.length && 'picked by ' + p.picks.map((id) => 'O' + id).join(', '),
         p.note && 'has note',
       ]
@@ -3849,9 +4041,14 @@ function gridKeydown(app, section, e) {
     else app.toast('Select a dimension (its row title) to move it with M.');
     return true;
   }
-  if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x')) {
+  if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x' || /^[0-3]$/.test(key))) {
     const { node } = findNode(space, sel.uid);
-    app.change(() => toggleMark(node, key === 'f' ? 'focus' : 'out'));
+    if (key === 'f') app.change(() => cycleStage(node));
+    else if (key === 'x') app.change(() => toggleMark(node, 'out'));
+    else {
+      const n = Number(key);
+      app.change(() => setStage(node, n === node.stage ? null : n));
+    }
     return true;
   }
   if (section === 'solution' && sel.type === 'param') {
@@ -3903,7 +4100,7 @@ async function moveToOtherSection(app, section, sel, pos) {
   const { marks, picks } = moveLosses(found.node);
   const lost =
     to === 'solution' && marks
-      ? `${plural(marks, 'focus / out-of-scope mark is', 'focus / out-of-scope marks are')} removed, because the solution space has no marks.`
+      ? `${plural(marks, 'parameter loses its', 'parameters lose their')} stage or out-of-scope mark, because the solution space has neither.`
       : to === 'problem' && picks
         ? `${plural(picks, 'pick by an option is', 'picks by options are')} removed, because the problem space has no picks. Ratings stay as they are.`
         : '';
@@ -3928,7 +4125,7 @@ __m["ui/paths.js"] = (() => {
 // with the grid and only needs redrawing when the layout changes.
 
 const { s, clear } = __m["ui/dom.js"];
-const { parametersOf } = __m["model.js"];
+const { parametersOf, inScope } = __m["model.js"];
 const { optionStyle } = __m["ui/grid.js"];
 
 /** Cell centres of an option's picks: row by row, left to right within a row. */
@@ -3952,7 +4149,11 @@ function drawPaths(app, canvas) {
   clear(svg);
   const { state, space } = app;
   const active = state.activeOption;
-  const ids = state.compare ? space.options.items.map((o) => o.id) : active !== null ? [active] : [];
+  const ids = state.compare
+    ? space.options.items.filter((o) => o.id === active || inScope(o.stage, state.scopeUpTo)).map((o) => o.id)
+    : active !== null
+      ? [active]
+      : [];
   if (!ids.length) return;
 
   const origin = canvas.getBoundingClientRect();
@@ -4006,6 +4207,80 @@ function watchPaths(app, canvas) {
 return { drawPaths, watchPaths };
 })();
 
+// ---- ui/legend.js
+__m["ui/legend.js"] = (() => {
+// Legend above the Problem and Solution grids: what rows, cells and tints mean,
+// plus the "scope up to stage N" filter, which greys out later stages (and the
+// options that address them). The filter is a view setting, not saved.
+
+const { h } = __m["ui/dom.js"];
+const { STAGES, stageName, inScope } = __m["model.js"];
+
+/** A small pill with a stage's name, tinted like the stage. */
+function stagePill(space, stage, extraClass) {
+  if (!STAGES.includes(stage)) return null;
+  return h('span', { class: ['stage-pill', 'stage-' + stage, extraClass] }, stageName(space, stage));
+}
+
+/** Whether an option is outside the current scope filter. */
+const optionBeyondScope = (app, option) => !inScope(option.stage, app.state.scopeUpTo);
+
+function scopeFilter(app) {
+  const { state, space } = app;
+  const button = (upTo, label, title) =>
+    h(
+      'button',
+      {
+        class: ['toggle', upTo && 'stage-' + upTo],
+        'aria-pressed': state.scopeUpTo === upTo ? 'true' : 'false',
+        title,
+        onclick: () => app.setScope(upTo),
+      },
+      label,
+    );
+  return h(
+    'div',
+    { class: 'scope-filter', role: 'group', 'aria-label': 'Scope filter' },
+    h('span', { class: 'bar-label' }, 'Scope up to'),
+    h(
+      'div',
+      { class: 'segmented' },
+      button(null, 'All', 'Show everything'),
+      STAGES.map((n) =>
+        button(n, stageName(space, n), n === 1 ? `Grey out everything outside ${stageName(space, 1)}` : `Grey out everything beyond ${stageName(space, n)}`),
+      ),
+    ),
+  );
+}
+
+/** The legend's entries for a grid section (also used by the print view). */
+function legendItems(app, section) {
+  const { space } = app;
+  const items = [];
+  if (section === 'problem') {
+    items.push(
+      h('span', { class: 'legend-item' }, h('strong', null, 'Rows'), ' dimensions of the problem'),
+      h('span', { class: 'legend-item' }, h('strong', null, 'Cells'), ' their parameters'),
+      ...STAGES.map((n) => h('span', { class: 'legend-item' }, h('span', { class: ['legend-swatch', 'stage-' + n], 'aria-hidden': 'true' }), stageName(space, n))),
+      h('span', { class: 'legend-item legend-out' }, 'Out of scope'),
+    );
+  } else {
+    items.push(
+      h('span', { class: 'legend-item' }, h('strong', null, 'Rows'), ' dimensions of the solution'),
+      h('span', { class: 'legend-item' }, h('strong', null, 'Cells'), ' building blocks'),
+      h('span', { class: 'legend-item' }, h('strong', null, 'Paths'), ' options: the blocks each one picks'),
+      h('span', { class: 'legend-item' }, h('strong', null, 'Stages'), ' ', STAGES.map((n) => stagePill(space, n))),
+    );
+  }
+  return items;
+}
+
+function renderLegend(app, section) {
+  return h('div', { class: 'legend-bar' }, h('div', { class: 'legend', role: 'note', 'aria-label': 'Legend' }, legendItems(app, section)), scopeFilter(app));
+}
+return { stagePill, optionBeyondScope, scopeFilter, legendItems, renderLegend };
+})();
+
 // ---- ui/options-bar.js
 __m["ui/options-bar.js"] = (() => {
 // Options bar above the Solution grid (§3.3): one chip per option, "+ Option",
@@ -4014,6 +4289,7 @@ __m["ui/options-bar.js"] = (() => {
 const { h, s } = __m["ui/dom.js"];
 const { addOption, moveItem } = __m["model.js"];
 const { optionVars, optionStyle } = __m["ui/grid.js"];
+const { stagePill, optionBeyondScope } = __m["ui/legend.js"];
 
 /** A small colour swatch that also shows the option's line style. */
 function swatch(id, lineStyles = false) {
@@ -4038,7 +4314,7 @@ function renderOptionsBar(app) {
     const chip = h(
       'button',
       {
-        class: ['chip', active && 'active', active && state.pickMode && 'picking'],
+        class: ['chip', active && 'active', active && state.pickMode && 'picking', optionBeyondScope(app, o) && 'beyond-scope'],
         style: optionVars(o.id),
         draggable: 'true',
         'aria-pressed': active ? 'true' : 'false',
@@ -4054,6 +4330,7 @@ function renderOptionsBar(app) {
       swatch(o.id, state.lineStyles),
       h('span', { class: 'id' }, 'O' + o.id),
       h('span', { class: ['chip-title', !o.title && 'empty'] }, o.title || 'Untitled'),
+      stagePill(space, o.stage),
     );
     chips.append(chip);
   }
@@ -4164,7 +4441,9 @@ const SHORTCUTS = [
   ['Alt + ↑ ↓', 'Move a dimension'],
   ['Alt + ← →', 'Move a parameter'],
   ['M', 'Move a dimension to the other space'],
-  ['F, X', 'Problem: mark focus / out of scope'],
+  ['1 – 3, 0', 'Problem: set the stage, clear it'],
+  ['F', 'Problem: cycle the stage'],
+  ['X', 'Problem: mark out of scope'],
   ['1 – 9', 'Solution: toggle pick for O1 – O9'],
   ['Space', 'Pick mode: toggle pick'],
   ['Ctrl + Z', 'Undo'],
@@ -4186,7 +4465,7 @@ __m["ui/inspector.js"] = (() => {
 // when nothing is selected, plus a few item-specific controls.
 
 const { h } = __m["ui/dom.js"];
-const { findNode, findOption, optionProfile, togglePick, toggleMark, coordinate, rowLetter, parametersOf, duplicateOption, removeOption, clampAllScores, cleanTitle } = __m["model.js"];
+const { findNode, findOption, optionProfile, togglePick, toggleMark, setStage, stageName, cleanStageName, STAGES, DEFAULT_STAGE_NAMES, coordinate, rowLetter, parametersOf, duplicateOption, removeOption, clampAllScores, cleanTitle } = __m["model.js"];
 const { swatch } = __m["ui/options-bar.js"];
 const { SHORTCUTS } = __m["ui/shortcuts.js"];
 
@@ -4308,18 +4587,17 @@ function nodeInspector(app, { kind, found, section }) {
     out.push(head('Parameter', `${ref} · ${parent.title || 'Untitled dimension'}`));
     out.push(titleField(app, node), noteField(app, node));
     if (section === 'problem') {
-      const mark = (m, label, key) =>
-        h(
-          'button',
-          {
-            class: ['toggle', 'mark-toggle', 'mark-' + m],
-            'aria-pressed': node.mark === m ? 'true' : 'false',
-            onclick: () => app.change(() => toggleMark(node, m)),
-          },
-          label,
-          h('kbd', null, key),
-        );
-      out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Mark'), h('div', { class: 'segmented' }, mark('focus', 'Focus', 'F'), mark('out', 'Out of scope', 'X'))));
+      const outButton = h(
+        'button',
+        {
+          class: ['toggle', 'mark-toggle', 'mark-out'],
+          'aria-pressed': node.mark === 'out' ? 'true' : 'false',
+          onclick: () => app.change(() => toggleMark(node, 'out')),
+        },
+        'Out of scope',
+        h('kbd', null, 'X'),
+      );
+      out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, node, true), outButton)));
     } else {
       const list = h('div', { class: 'pick-list' });
       for (const o of space.options.items) {
@@ -4358,10 +4636,27 @@ function nodeInspector(app, { kind, found, section }) {
   return out;
 }
 
+/** One toggle per stage; pressing the current stage clears it. */
+function stageButtons(app, item, withKeys) {
+  return STAGES.map((n) =>
+    h(
+      'button',
+      {
+        class: ['toggle', 'stage-toggle', 'stage-' + n],
+        'aria-pressed': item.stage === n ? 'true' : 'false',
+        onclick: () => app.change(() => setStage(item, item.stage === n ? null : n)),
+      },
+      stageName(app.space, n),
+      withKeys ? h('kbd', null, String(n)) : null,
+    ),
+  );
+}
+
 function optionInspector(app, option) {
   const { space, state } = app;
   const out = [head('Option', null, h('span', { class: 'insp-ref option-ref' }, swatch(option.id, state.lineStyles), 'O' + option.id))];
   out.push(titleField(app, option), noteField(app, option, 'Note', 'What is the idea behind this option?'));
+  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Addresses stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, option, false))));
   const active = state.activeOption === option.id;
   out.push(
     h(
@@ -4459,6 +4754,20 @@ function documentInspector(app) {
       },
     });
   out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Rating scale'), h('div', { class: 'scale-row' }, scaleInput('min'), h('span', null, 'to'), scaleInput('max'))));
+  const stageNames = h('div', { class: 'stage-names' });
+  for (const n of STAGES) {
+    stageNames.append(
+      field(app, {
+        label: `Stage ${n}`,
+        value: meta.stages[n - 1],
+        placeholder: DEFAULT_STAGE_NAMES[n - 1],
+        cls: 'stage-' + n,
+        onInput: (v) => (meta.stages[n - 1] = v),
+        onCommit: (v) => (meta.stages[n - 1] = cleanStageName(v) || DEFAULT_STAGE_NAMES[n - 1]),
+      }),
+    );
+  }
+  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage names'), stageNames));
   if (meta.updated) out.push(h('p', { class: 'insp-meta' }, 'Last saved ' + meta.updated));
   if (meta.extra.length) {
     const dl = h('dl', { class: 'profile' });
@@ -4485,6 +4794,7 @@ const { h } = __m["ui/dom.js"];
 const { addCriterion, removeCriterion, moveItem, findCriterion, findOption, getRating, setRating, rankOptions, scoreFraction, optionProfile, clampWeight, criterionKey } = __m["model.js"];
 const { optionVars, selKey, NAV_KEYS } = __m["ui/grid.js"];
 const { swatch } = __m["ui/options-bar.js"];
+const { stagePill, optionBeyondScope, scopeFilter } = __m["ui/legend.js"];
 const { field } = __m["ui/inspector.js"];
 
 // ---------------------------------------------------------------- helpers
@@ -4546,6 +4856,7 @@ function renderEvalHead(app) {
     toggle('sortByRank', 'Sort options by rank', 'Order the columns by rank. The stored order does not change.'),
     toggle('showNotes', 'Show all notes', 'Show every rating note under its score, for reviews and printing'),
     toggle('heatmap', 'Heatmap', 'Tint scores by value'),
+    scopeFilter(app),
   );
 }
 
@@ -4553,13 +4864,14 @@ function optionHead(app, o, extra) {
   return h(
     'th',
     {
-      class: 'opt-head',
+      class: ['opt-head', optionBeyondScope(app, o) && 'beyond-scope'],
       scope: 'col',
       style: optionVars(o.id),
       title: o.note || null,
       dataset: { option: String(o.id) },
     },
     h('button', { class: 'opt-head-btn', onclick: () => app.inspectOption(o.id) }, swatch(o.id, app.state.lineStyles), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: ['opt-title', !o.title && 'empty'] }, o.title || 'Untitled')),
+    stagePill(app.space, o.stage),
     extra,
   );
 }
@@ -5173,6 +5485,7 @@ const { optionVars } = __m["ui/grid.js"];
 const { drawPaths } = __m["ui/paths.js"];
 const { swatch } = __m["ui/options-bar.js"];
 const { displayOptions, renderProfiles, ordinal } = __m["ui/evaluation.js"];
+const { legendItems, stagePill } = __m["ui/legend.js"];
 
 // Landscape A4 or Letter with 12 mm margins is at least ~960 CSS px wide.
 const PAGE_WIDTH = 960;
@@ -5210,7 +5523,8 @@ function staticGrid(app, section, notes) {
       const pn = p.note ? notes.add(coord, p.title, p.note) : 0;
       const cls = ['cell', 'param'];
       let style = null;
-      if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
+      if (section === 'problem' && p.stage) cls.push('stage-' + p.stage);
+      else if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
       const markers = [];
       if (solution) {
         if (active !== null && p.picks.includes(active)) {
@@ -5270,6 +5584,7 @@ function optionLegend(app) {
         swatch(o.id, state.lineStyles),
         h('span', { class: 'id' }, 'O' + o.id),
         h('span', { class: 'legend-title' }, o.title || 'Untitled'),
+        stagePill(app.space, o.stage),
         o.note ? h('span', { class: 'legend-note' }, o.note) : null,
       ),
     ),
@@ -5345,13 +5660,13 @@ function preparePrint(app) {
   if (space.problem.note || space.problem.dims.length) {
     const notes = footnotes();
     const grid = staticGrid(app, 'problem', notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Problem'), band(space.problem.note, 'band'), grid, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Problem'), band(space.problem.note, 'band'), h('div', { class: 'legend' }, legendItems(app, 'problem')), grid, notes.render()));
   }
   let solutionCanvas = null;
   if (space.solution.note || space.solution.dims.length) {
     const notes = footnotes();
     solutionCanvas = staticGrid(app, 'solution', notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Solution'), band(space.solution.note, 'intro'), optionLegend(app), solutionCanvas, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Solution'), band(space.solution.note, 'intro'), h('div', { class: 'legend' }, legendItems(app, 'solution')), optionLegend(app), solutionCanvas, notes.render()));
   }
   const opts = displayOptions(app);
   if (opts.length || space.criteria.items.length) {
@@ -5389,7 +5704,7 @@ return { preparePrint, cleanupPrint };
 // ---- examples.js
 __m["examples.js"] = (() => {
 const EXAMPLES = {
-  "car-concept.zwicky.md": "---\nzwicky: 1\ntitle: Car Concept (demo)\nscale: 1-5\n---\n\n# Problem\n> Which new car concept should we bring to market next?\n\n## Market\n- Urban commuters {focus}\n- Families\n- Long-distance travellers\n- Luxury segment {out}\n\n## Constraints\n- Launch within three years {focus}\n- Reuse an existing platform\n- Budget below 500m\n\n# Solution\n\n## Front design\n- aggressive\n- edgy (new edge)\n- slim\n- flowing\n- sporty\n- athletic {O1}\n\n## Drivetrain\n- Petrol 100–200 hp\n- Petrol 200–300 hp\n- Diesel {O3}\n- Hybrid {O1}\n- Hydrogen\n- Electric {O2}\n\n## Seats\n- 2\n- 4 {O2}\n- 5 {O1}\n- 6 {O3}\n- 6+ incl. sleeping berth\n\n## Body\n- Sedan\n- Minivan {O3}\n- SUV {O1}\n- Estate\n- Coupé {O2}\n- Pick-up\n\n## Character\n- proud {O1}\n- cool {O2}\n- friendly {O3}\n- cheeky\n- \"French\"\n- \"American\"\n\n## Marketing asset\n- Streaming partnership {O2}\n- Rail partnership for long distance {O1}\n  > Car for the last mile, train for the long haul.\n- New paint every year\n- Fridge and mini kitchen {O3}\n\n## Target group\n- HNWIs\n  > High Net Worth Individuals.\n- DINKs {O2}\n  > Double Income, No Kids.\n- LOHAS {O1}\n  > Lifestyle Of Health And Sustainability.\n- WOOPIEs {O1}\n  > Well-Off Older People.\n- MILKIEs\n  > Modest Introverted Luxury Keepers.\n\n# Options\n\n## O1 Athletic hybrid SUV\n> The classic path through the box.\n\n## O2 City coupé\n\n## O3 Family hauler\n> Deliberately leaves the target group open.\n\n# Criteria\n\n## C1 Market size {w=3}\n> How many buyers does this reach in our core markets?\n\n## C2 Time to market {w=2}\n> Can we launch within three years on existing platforms?\n\n## C3 Brand fit\n> Does it feel like us?\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > Two target groups; assumes LOHAS and WOOPIEs overlap little.\n- C2: 3\n- C3: 5\n\n## O2 City coupé\n- C1: 3\n- C2: 4\n  > Reuses the existing EV platform (assumption, to be confirmed).\n- C3: 3\n\n## O3 Family hauler\n- C1: 4\n- C2: 2\n  > Diesel minivan may need new emissions homologation.\n",
+  "car-concept.zwicky.md": "---\nzwicky: 1\ntitle: Car Concept (demo)\nscale: 1-5\n---\n\n# Problem\n> Which new car concept should we bring to market next?\n\n## Market\n- Urban commuters {focus}\n- Families {focus=2}\n- Long-distance travellers {focus=3}\n- Luxury segment {out}\n\n## Constraints\n- Launch within three years {focus}\n- Reuse an existing platform\n- Budget below 500m\n\n# Solution\n\n## Front design\n- aggressive\n- edgy (new edge)\n- slim\n- flowing\n- sporty\n- athletic {O1}\n\n## Drivetrain\n- Petrol 100–200 hp\n- Petrol 200–300 hp\n- Diesel {O3}\n- Hybrid {O1}\n- Hydrogen\n- Electric {O2}\n\n## Seats\n- 2\n- 4 {O2}\n- 5 {O1}\n- 6 {O3}\n- 6+ incl. sleeping berth\n\n## Body\n- Sedan\n- Minivan {O3}\n- SUV {O1}\n- Estate\n- Coupé {O2}\n- Pick-up\n\n## Character\n- proud {O1}\n- cool {O2}\n- friendly {O3}\n- cheeky\n- \"French\"\n- \"American\"\n\n## Marketing asset\n- Streaming partnership {O2}\n- Rail partnership for long distance {O1}\n  > Car for the last mile, train for the long haul.\n- New paint every year\n- Fridge and mini kitchen {O3}\n\n## Target group\n- HNWIs\n  > High Net Worth Individuals.\n- DINKs {O2}\n  > Double Income, No Kids.\n- LOHAS {O1}\n  > Lifestyle Of Health And Sustainability.\n- WOOPIEs {O1}\n  > Well-Off Older People.\n- MILKIEs\n  > Modest Introverted Luxury Keepers.\n\n# Options\n\n## O1 Athletic hybrid SUV {stage=3}\n> The classic path through the box.\n\n## O2 City coupé {stage=1}\n\n## O3 Family hauler {stage=2}\n> Deliberately leaves the target group open.\n\n# Criteria\n\n## C1 Market size {w=3}\n> How many buyers does this reach in our core markets?\n\n## C2 Time to market {w=2}\n> Can we launch within three years on existing platforms?\n\n## C3 Brand fit\n> Does it feel like us?\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > Two target groups; assumes LOHAS and WOOPIEs overlap little.\n- C2: 3\n- C3: 5\n\n## O2 City coupé\n- C1: 3\n- C2: 4\n  > Reuses the existing EV platform (assumption, to be confirmed).\n- C3: 3\n\n## O3 Family hauler\n- C1: 4\n- C2: 2\n  > Diesel minivan may need new emissions homologation.\n",
   "slide-generator.zwicky.md": "---\nzwicky: 1\ntitle: Slide-Generator (intern)\nscale: 1-5\n---\n\n# Problem\n> Anforderungen und Parameter für einen internen Slide-Generator.\n\n## Hosting\n- Swiss Residency {focus}\n\n## Präsentations-Art\n- Native PPTX {focus}\n\n## Umfang\n> Was soll der Generator erzeugen?\n- Einzelne Slides {focus}\n- Slide-Sequenz zu einem bestimmten Thema\n- Vollständige Präsentation\n- Überarbeitung einer bestehenden Präsentation\n- Erweiterung einer bestehenden Präsentation\n\n## Slide-Typen\n> Welche Art von Slides sollen erstellt werden können?\n- Mit Einschränkung › Strukturelle Slides\n  > Nur Slides, für die vorgängig ein Template definiert wird: Cover, Agenda, Kapiteltrenner, Abschlussfolie.\n- Mit Einschränkung › Offerten-Slides\n  > Team, Kostenschätzung, Arbeitspakete, Zeitplan …\n- Mit Einschränkung › Consulting-Slides\n  > Empfehlungen, Entscheidungsfolien, Problem Statements, Ausgangslage & Zielsetzung …\n- Mit Einschränkung › Architektur-Slides\n  > Zielarchitektur …\n- Ohne Einschränkung\n  > Es sollen alle möglichen Slides generiert werden können.\n\n## Styling\n> Welches Styling soll für die Slides verwendet werden?\n- Acrea Styling {focus}\n- Kunden-Styling\n- Neutrales Styling\n\n## Sprachen\n> Welche Sprache soll der Text auf den Slides haben?\n- Deutsch\n- Englisch\n\n## Quellen\n> Welche Informationen soll der Slide-Generator nutzen, um die Slides zu erstellen?\n- Prompt\n- Bestehende PPT\n- Word\n- PDF\n- OneNote {out}\n- E-Mail\n- SharePoint-Dokumente\n\n## Umgang mit den Quellen\n> Wie soll der Slide-Generator mit den Quellen umgehen?\n- Zusammenfassen (keine Interpretation)\n- Interpretieren\n- Ergänzende Infos im Internet suchen und ergänzen\n\n## Umgang mit Widersprüchen\n> Wie soll der Slide-Generator damit umgehen, wenn er widersprüchliche Informationen findet?\n- Auf dem Slide visuell hervorheben\n- Kommentar in der PPT erfassen\n  > Unklar, ob technisch möglich.\n- Notiz in den Speaker Notes\n  > Unklar, ob technisch möglich.\n\n## Interaktions-Ort\n> Wo soll mit dem Slide-Generator interagiert werden?\n- Copilot direkt in PowerPoint\n- Agent in der Copilot-App\n- Web-Anwendung im Browser\n\n## Interaktionsmodell\n> Wie soll mit dem Slide-Generator interagiert werden?\n- Prompt-basiert\n  > Ein Prompt, alle relevanten Informationen werden darin mitgegeben.\n- Geführter Assistant\n  > Relevante Informationen werden schrittweise gemeinsam mit dem Assistant erarbeitet.\n\n## Inhaltliche Aufgaben\n> Welche inhaltlichen Aufgaben übernimmt der Slide-Generator?\n- Storyline aus Quellen ableiten\n- Kernaussage pro Slide formulieren\n- Argumentation auf Konsistenz prüfen\n"
 };
 return { EXAMPLES };
@@ -5397,13 +5712,13 @@ return { EXAMPLES };
 
 // ---- format-doc.js
 __m["format-doc.js"] = (() => {
-const FORMAT_DOC = "# The zwicky file format (`*.zwicky.md`), version 1\n\nA zwicky file holds one **space**: a problem space and a solution space (grids of *dimensions × parameters*), the **options** composed from the solution space, the **criteria** they are rated against, and the **ratings**. It is plain Markdown, readable in any viewer and diffable in Git, with a small, strict structure that tools (and LLMs) can parse.\n\nThis document is the contract. The reference implementation is `src/js/format.js`, and it is kept in sync with this text. You can hand this file to an LLM and ask it to draft or edit a space.\n\n## Principles\n\n- Every file is valid CommonMark.\n- Structure is carried **only** by: the front matter, heading levels, list items, blockquote notes (`>`), and one trailing `{…}` tag group. Nothing else has meaning.\n- **Tolerant reader, canonical writer.** zwicky accepts small variations when it opens a file and always saves one canonical form. Saving an unchanged canonical file produces the same bytes (apart from `updated`).\n- Opening never fails on content. Problems are listed in an **import report** with line numbers. Lines that cannot be placed are kept in a `# Notes` section instead of being dropped.\n- Parameters belong to their dimension by position. Options and criteria have **stable ids** (`O1`, `C1`) used for all cross-references.\n\n## Example\n\n```markdown\n---\nzwicky: 1\ntitle: Car Concept\nscale: 1-5\nupdated: 2026-10-09\n---\n\n# Problem\n> The problem statement. Consecutive \"> \" lines form one multi-line note.\n\n## Market\n> A dimension note.\n- Urban commuters {focus}\n  > A parameter note, indented two spaces.\n- Luxury segment {out}\n- Families\n\n# Solution\n\n## Drivetrain\n- Hybrid {O1}\n- Electric {O1 O2}\n  > A parameter note.\n- Diesel\n\n# Options\n\n## O1 Athletic hybrid SUV\n> An option note.\n\n## O2 City coupé\n\n# Criteria\n\n## C1 Market size {w=3}\n> What \"great\" looks like.\n\n## C2 Brand fit\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > The rationale or assumption behind this score.\n- C2: ?\n  > A note without a score yet.\n\n## O2 City coupé\n- C1: 3\n```\n\n## Grammar\n\n### Front matter\n\nThe file starts with a front matter block between two `---` lines. It is a strict subset of YAML: one `key: value` per line, no nesting, no quoting. The value is everything after the first `: `, trimmed.\n\n| Key | Meaning |\n|---|---|\n| `zwicky` | Format version. Required; currently `1`. |\n| `title` | Document title. |\n| `scale` | Rating scale `<min>-<max>`, non-negative integers, `min < max ≤ 100`. Default `1-5`. |\n| `updated` | ISO date (`YYYY-MM-DD`), set by zwicky on Save. |\n\nOther keys are kept, in their original order.\n\n### Sections\n\nTop-level `#` headings, in this order, each optional:\n\n| Section | Holds |\n|---|---|\n| `# Problem` | Dimensions of the problem space. Its note is the **problem statement**. |\n| `# Solution` | Dimensions of the solution space. |\n| `# Options` | One `## O<n> Title` heading per option. |\n| `# Criteria` | One `## C<n> Title {w=<weight>}` heading per criterion. |\n| `# Ratings` | One `## O<n> Title` block per option, with one line per rated criterion. |\n| `# Notes` | Free text, kept verbatim. Always last. |\n\nEvery section except `# Notes` can carry a note directly under its heading.\n\n### Dimensions and parameters (Problem, Solution)\n\n- A **dimension** is a `##` heading. Its title is a short buzzword.\n- A **parameter** is a list item `- Title` under its dimension. Rows can have different numbers of parameters.\n- Problem parameters can carry a **mark** tag: `{focus}` or `{out}` (out of scope).\n- Solution parameters list the options that **pick** them: `{O1 O3}`. An option picks 0..n parameters per dimension.\n\n### Options and criteria\n\n- Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers, assigned once (highest + 1) and never renumbered.\n- A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.\n\n### Ratings\n\n- Under `# Ratings`, each `## O<n> Title` heading opens the ratings of one option. The **id is authoritative**; the title is informational and is rewritten with the current option title on save.\n- A rating line is `- C<n>: <score>`, with an integer score on the document's scale, or `- C<n>: ?` for a note without a score yet.\n- A missing line means *unrated*, which is not the same as a low score.\n\n### Notes\n\n- A note is one or more consecutive `>` lines directly after the heading or list item it belongs to.\n- Notes of list items are indented two spaces: `  > …`.\n- A bare `>` line is an empty line inside the note.\n- Notes are plain text. Line breaks are kept; Markdown inside notes is not rendered.\n\n### Titles\n\n- Titles are single-line. (Use notes for anything longer.)\n- Tags are a single `{…}` group at the **end** of a heading or list-item line, after whitespace, with space-separated tokens.\n- A title **never ends in a `{…}` group** (braces preceded by a space, or making up the whole title), because that is exactly what a tag group looks like. zwicky turns the braces of such a trailing group into parentheses: `Budget {in CHF}` becomes `Budget (in CHF)`. Braces anywhere else are fine: `Set {a, b} of tags`, `a{b}`. So the format needs no escaping.\n\n### Tags\n\n| Token | Where | Meaning |\n|---|---|---|\n| `focus`, `out` | Problem parameters | Mark (one per parameter). |\n| `O<n>` | Solution parameters | Picked by option `O<n>`. |\n| `w=<int>` | Criterion headings | Weight 0–10. |\n\nAny other token is **kept** (and reported as unknown), so other tools can add their own.\n\n### Reserved: `###`\n\n`###` headings are reserved for **sub-dimensions** in a future version. Version 1 reads a `###` inside a dimension by flattening it into its parent: each of its parameters gets the title prefix `<Sub-dimension title> › `, and its note is appended to the parent dimension's note as `<Sub-dimension title>: <note>`. This is lossy by design and reported as a warning. zwicky v1 never writes `###`.\n\n```markdown\n## Slide-Typen\n* Ohne Einschränkung\n### Mit Einschränkung\n> Nur Slides mit vorgängig definiertem Template.\n* Strukturelle Slides\n* Offerten-Slides\n```\n\nis read as\n\n```markdown\n## Slide-Typen\n> Mit Einschränkung: Nur Slides mit vorgängig definiertem Template.\n- Ohne Einschränkung\n- Mit Einschränkung › Strukturelle Slides\n- Mit Einschränkung › Offerten-Slides\n```\n\n## Canonical form\n\nThis is exactly what zwicky writes:\n\n- UTF-8 without BOM, LF line endings, exactly one trailing newline, no trailing spaces.\n- Front matter keys in the order `zwicky`, `title`, `scale`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set.\n- A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.\n- Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.\n- List bullets are `- `.\n- Tag tokens: the mark first, then option ids sorted numerically, then unknown tokens in their original order. `{w=1}` is omitted.\n- Sections in the order Problem, Solution, Options, Criteria, Ratings, Notes. Empty sections are omitted.\n- In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.\n- `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).\n\n## What the reader tolerates\n\nEach of these opens fine. Items marked † add a line to the import report.\n\n- A byte-order mark, CRLF or CR line endings, trailing spaces.\n- Extra or missing blank lines anywhere.\n- `*` and `+` bullets; list items and `>` notes at any indentation.\n- Missing sections, sections in any order, lower-case section names (`# solution`).\n- No front matter (read as version 1) †; front matter without `zwicky` †; an invalid `scale` (falls back to `1-5`) †; duplicate keys (the last wins) †.\n- `## O1: Title` or `## O1. Title` as well as `## O1 Title`.\n- Option or criterion headings without an id: they get the next free id †.\n- Duplicate option or criterion ids: later duplicates get new ids †.\n- Picks or ratings referring to unknown options or criteria: dropped †.\n- Scores outside the scale: clamped †. Weights outside 0–10: clamped †. Scores that are not whole numbers: left unscored †.\n- Unknown tag tokens: kept †.\n- A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.\n- A parameter with both `focus` and `out`: the first wins †.\n- `###` sub-dimensions: flattened †.\n- A section repeated: merged †.\n- Unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.\n- `- C1:` with nothing after the colon: same as `?`.\n\n## Versions\n\n`zwicky: 1` in the front matter is the format version. A file with a higher version than the app supports is refused with a clear message instead of being misread. Older versions are upgraded step by step on open (the `MIGRATIONS` list in `format.js`).\n\n## Scoring (for reference)\n\nThe weighted score of an option is Σ weight × score ÷ Σ weight, over the criteria that are rated for that option and have weight > 0, shown with one decimal. Unrated criteria do not count as zero; they are counted separately. Options are ranked by the displayed score; equal scores share a rank (1, 1, 3).\n";
+const FORMAT_DOC = "# The zwicky file format (`*.zwicky.md`), version 1\n\nA zwicky file holds one **space**: a problem space and a solution space (grids of *dimensions × parameters*), the **options** composed from the solution space, the **criteria** they are rated against, and the **ratings**. It is plain Markdown, readable in any viewer and diffable in Git, with a small, strict structure that tools (and LLMs) can parse.\n\nThis document is the contract. The reference implementation is `src/js/format.js`, and it is kept in sync with this text. You can hand this file to an LLM and ask it to draft or edit a space.\n\n## Principles\n\n- Every file is valid CommonMark.\n- Structure is carried **only** by: the front matter, heading levels, list items, blockquote notes (`>`), and one trailing `{…}` tag group. Nothing else has meaning.\n- **Tolerant reader, canonical writer.** zwicky accepts small variations when it opens a file and always saves one canonical form. Saving an unchanged canonical file produces the same bytes (apart from `updated`).\n- Opening never fails on content. Problems are listed in an **import report** with line numbers. Lines that cannot be placed are kept in a `# Notes` section instead of being dropped.\n- Parameters belong to their dimension by position. Options and criteria have **stable ids** (`O1`, `C1`) used for all cross-references.\n\n## Example\n\n```markdown\n---\nzwicky: 1\ntitle: Car Concept\nscale: 1-5\nstages: Pilot, Rollout, Full\nupdated: 2026-10-09\n---\n\n# Problem\n> The problem statement. Consecutive \"> \" lines form one multi-line note.\n\n## Market\n> A dimension note.\n- Urban commuters {focus}\n  > A parameter note, indented two spaces.\n- Families {focus=2}\n- Long-distance travellers {focus=3}\n- Luxury segment {out}\n\n# Solution\n\n## Drivetrain\n- Hybrid {O1}\n- Electric {O1 O2}\n  > A parameter note.\n- Diesel\n\n# Options\n\n## O1 Athletic hybrid SUV {stage=2}\n> An option note.\n\n## O2 City coupé {stage=1}\n\n# Criteria\n\n## C1 Market size {w=3}\n> What \"great\" looks like.\n\n## C2 Brand fit\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > The rationale or assumption behind this score.\n- C2: ?\n  > A note without a score yet.\n\n## O2 City coupé\n- C1: 3\n```\n\n## Grammar\n\n### Front matter\n\nThe file starts with a front matter block between two `---` lines. It is a strict subset of YAML: one `key: value` per line, no nesting, no quoting. The value is everything after the first `: `, trimmed.\n\n| Key | Meaning |\n|---|---|\n| `zwicky` | Format version. Required; currently `1`. |\n| `title` | Document title. |\n| `scale` | Rating scale `<min>-<max>`, non-negative integers, `min < max ≤ 100`. Default `1-5`. |\n| `stages` | Names of the three stages, comma-separated: `stages: Pilot, Rollout, Full`. Default `Horizon 1, Horizon 2, Horizon 3`, which is not written. Names cannot contain commas. |\n| `updated` | ISO date (`YYYY-MM-DD`), set by zwicky on Save. |\n\nOther keys are kept, in their original order.\n\n### Sections\n\nTop-level `#` headings, in this order, each optional:\n\n| Section | Holds |\n|---|---|\n| `# Problem` | Dimensions of the problem space. Its note is the **problem statement**. |\n| `# Solution` | Dimensions of the solution space. |\n| `# Options` | One `## O<n> Title` heading per option. |\n| `# Criteria` | One `## C<n> Title {w=<weight>}` heading per criterion. |\n| `# Ratings` | One `## O<n> Title` block per option, with one line per rated criterion. |\n| `# Notes` | Free text, kept verbatim. Always last. |\n\nEvery section except `# Notes` can carry a note directly under its heading.\n\n### Dimensions and parameters (Problem, Solution)\n\n- A **dimension** is a `##` heading. Its title is a short buzzword.\n- A **parameter** is a list item `- Title` under its dimension. Rows can have different numbers of parameters.\n- Problem parameters can carry a **stage** or the **out-of-scope mark**, never both:\n  - `{focus}` is stage 1, where the scope starts; `{focus=2}` and `{focus=3}` widen it in steps. Each stage includes the ones before it. The stage names come from the `stages` front matter key.\n  - `{out}` marks a parameter out of scope.\n- Solution parameters list the options that **pick** them: `{O1 O3}`. An option picks 0..n parameters per dimension.\n\n### Options and criteria\n\n- Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers, assigned once (highest + 1) and never renumbered.\n- A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.\n- An option can name the **stage** of the problem it addresses: `## O2 City coupé {stage=1}`, with a stage from 1 to 3. No tag means no stage.\n\n### Ratings\n\n- Under `# Ratings`, each `## O<n> Title` heading opens the ratings of one option. The **id is authoritative**; the title is informational and is rewritten with the current option title on save.\n- A rating line is `- C<n>: <score>`, with an integer score on the document's scale, or `- C<n>: ?` for a note without a score yet.\n- A missing line means *unrated*, which is not the same as a low score.\n\n### Notes\n\n- A note is one or more consecutive `>` lines directly after the heading or list item it belongs to.\n- Notes of list items are indented two spaces: `  > …`.\n- A bare `>` line is an empty line inside the note.\n- Notes are plain text. Line breaks are kept; Markdown inside notes is not rendered.\n\n### Titles\n\n- Titles are single-line. (Use notes for anything longer.)\n- Tags are a single `{…}` group at the **end** of a heading or list-item line, after whitespace, with space-separated tokens.\n- A title **never ends in a `{…}` group** (braces preceded by a space, or making up the whole title), because that is exactly what a tag group looks like. zwicky turns the braces of such a trailing group into parentheses: `Budget {in CHF}` becomes `Budget (in CHF)`. Braces anywhere else are fine: `Set {a, b} of tags`, `a{b}`. So the format needs no escaping.\n\n### Tags\n\n| Token | Where | Meaning |\n|---|---|---|\n| `focus`, `focus=2`, `focus=3` | Problem parameters | Stage 1, 2 or 3. |\n| `out` | Problem parameters | Out of scope (instead of a stage). |\n| `stage=<1–3>` | Option headings | The stage of the problem the option addresses. |\n| `O<n>` | Solution parameters | Picked by option `O<n>`. |\n| `w=<int>` | Criterion headings | Weight 0–10. |\n\nAny other token is **kept** (and reported as unknown), so other tools can add their own.\n\n### Reserved: `###`\n\n`###` headings are reserved for **sub-dimensions** in a future version. Version 1 reads a `###` inside a dimension by flattening it into its parent: each of its parameters gets the title prefix `<Sub-dimension title> › `, and its note is appended to the parent dimension's note as `<Sub-dimension title>: <note>`. This is lossy by design and reported as a warning. zwicky v1 never writes `###`.\n\n```markdown\n## Slide-Typen\n* Ohne Einschränkung\n### Mit Einschränkung\n> Nur Slides mit vorgängig definiertem Template.\n* Strukturelle Slides\n* Offerten-Slides\n```\n\nis read as\n\n```markdown\n## Slide-Typen\n> Mit Einschränkung: Nur Slides mit vorgängig definiertem Template.\n- Ohne Einschränkung\n- Mit Einschränkung › Strukturelle Slides\n- Mit Einschränkung › Offerten-Slides\n```\n\n## Canonical form\n\nThis is exactly what zwicky writes:\n\n- UTF-8 without BOM, LF line endings, exactly one trailing newline, no trailing spaces.\n- Front matter keys in the order `zwicky`, `title`, `scale`, `stages`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set; `stages` only when the names differ from the defaults.\n- A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.\n- Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.\n- List bullets are `- `.\n- Tag tokens: the stage or mark first (stage 1 as `focus`), or an option's `stage=<n>`, then option ids sorted numerically, then unknown tokens in their original order. `{w=1}` is omitted.\n- Sections in the order Problem, Solution, Options, Criteria, Ratings, Notes. Empty sections are omitted.\n- In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.\n- `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).\n\n## What the reader tolerates\n\nEach of these opens fine. Items marked † add a line to the import report.\n\n- A byte-order mark, CRLF or CR line endings, trailing spaces.\n- Extra or missing blank lines anywhere.\n- `*` and `+` bullets; list items and `>` notes at any indentation.\n- Missing sections, sections in any order, lower-case section names (`# solution`).\n- No front matter (read as version 1) †; front matter without `zwicky` †; an invalid `scale` (falls back to `1-5`) †; duplicate keys (the last wins) †.\n- `## O1: Title` or `## O1. Title` as well as `## O1 Title`.\n- Option or criterion headings without an id: they get the next free id †.\n- Duplicate option or criterion ids: later duplicates get new ids †.\n- Picks or ratings referring to unknown options or criteria: dropped †.\n- Scores outside the scale: clamped †. Weights outside 0–10: clamped †. Scores that are not whole numbers: left unscored †.\n- Unknown tag tokens: kept †.\n- A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.\n- A parameter with two of `focus`, `focus=<n>` and `out`: the first wins †.\n- A stage outside 1–3 (`{focus=4}`, `{stage=7}`): kept as an unknown tag †.\n- `stages` with fewer than three names: the missing ones get the defaults †; with more than three: the extra names are dropped †.\n- `###` sub-dimensions: flattened †.\n- A section repeated: merged †.\n- Unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.\n- `- C1:` with nothing after the colon: same as `?`.\n\n## Versions\n\n`zwicky: 1` in the front matter is the format version. Stages were added to version 1 without a version change: an older zwicky keeps `{focus=2}`, `{stage=1}` and `stages:` as unknown tags and keys, so nothing is lost. A file with a higher version than the app supports is refused with a clear message instead of being misread. Older versions are upgraded step by step on open (the `MIGRATIONS` list in `format.js`).\n\n## Scoring (for reference)\n\nThe weighted score of an option is Σ weight × score ÷ Σ weight, over the criteria that are rated for that option and have weight > 0, shown with one decimal. Unrated criteria do not count as zero; they are counted separately. Options are ranked by the displayed score; equal scores share a rank (1, 1, 3).\n";
 return { FORMAT_DOC };
 })();
 
 // ---- version.js
 __m["version.js"] = (() => {
-const APP_VERSION = "1.1.0";
+const APP_VERSION = "1.2.0";
 return { APP_VERSION };
 })();
 
@@ -5419,6 +5734,7 @@ const store = __m["store.js"];
 const { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt, moveToOtherSection } = __m["ui/grid.js"];
 const { drawPaths, watchPaths } = __m["ui/paths.js"];
 const { renderOptionsBar } = __m["ui/options-bar.js"];
+const { renderLegend } = __m["ui/legend.js"];
 const { renderInspector, inspectedKey, field } = __m["ui/inspector.js"];
 const { SHORTCUTS } = __m["ui/shortcuts.js"];
 const { preparePrint, cleanupPrint } = __m["ui/print.js"];
@@ -5452,6 +5768,7 @@ const app = {
     pickMode: false,
     compare: !!prefs.compare,
     lineStyles: !!prefs.lineStyles,
+    scopeUpTo: null, // view filter: grey out what lies beyond stage n (not saved)
     evalView: { sortByRank: false, showNotes: false, heatmap: false, ...(prefs.evalView || {}) },
     inspectorOpen: prefs.inspectorOpen !== false,
     density: DENSITIES.includes(prefs.density) ? prefs.density : 'normal',
@@ -5612,6 +5929,11 @@ app.focusInspectorField = (id) => {
     el.focus();
     if (el.select && el.tagName === 'INPUT') el.select();
   }
+};
+
+app.setScope = (upTo) => {
+  app.state.scopeUpTo = upTo;
+  app.render();
 };
 
 app.setView = (patch) => {
@@ -5838,10 +6160,14 @@ function renderMain() {
   if (!focusInHead) {
     clear(els.head);
     els.head.dataset.tab = tab;
-    if (tab === 'problem') els.head.append(noteBand(app.space.problem, 'Problem statement', 'What problem are we solving? Write the problem statement here.', 'band'));
+    if (tab === 'problem') {
+      els.head.append(noteBand(app.space.problem, 'Problem statement', 'What problem are we solving? Write the problem statement here.', 'band'));
+      els.head.append(renderLegend(app, 'problem'));
+    }
     if (tab === 'solution') {
       els.head.append(noteBand(app.space.solution, 'Solution intro', 'Optional intro note for the solution space.', 'intro'));
       els.head.append(renderOptionsBar(app));
+      els.head.append(renderLegend(app, 'solution'));
     }
     if (tab === 'evaluation') els.head.append(renderEvalHead(app));
   }

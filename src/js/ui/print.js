@@ -9,6 +9,7 @@ import { optionVars } from './grid.js';
 import { drawPaths } from './paths.js';
 import { swatch } from './options-bar.js';
 import { displayOptions, renderProfiles, ordinal } from './evaluation.js';
+import { legendItems, stagePill } from './legend.js';
 
 // Landscape A4 or Letter with 12 mm margins is at least ~960 CSS px wide.
 const PAGE_WIDTH = 960;
@@ -46,7 +47,8 @@ function staticGrid(app, section, notes) {
       const pn = p.note ? notes.add(coord, p.title, p.note) : 0;
       const cls = ['cell', 'param'];
       let style = null;
-      if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
+      if (section === 'problem' && p.stage) cls.push('stage-' + p.stage);
+      else if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
       const markers = [];
       if (solution) {
         if (active !== null && p.picks.includes(active)) {
@@ -106,6 +108,7 @@ function optionLegend(app) {
         swatch(o.id, state.lineStyles),
         h('span', { class: 'id' }, 'O' + o.id),
         h('span', { class: 'legend-title' }, o.title || 'Untitled'),
+        stagePill(app.space, o.stage),
         o.note ? h('span', { class: 'legend-note' }, o.note) : null,
       ),
     ),
@@ -181,13 +184,13 @@ export function preparePrint(app) {
   if (space.problem.note || space.problem.dims.length) {
     const notes = footnotes();
     const grid = staticGrid(app, 'problem', notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Problem'), band(space.problem.note, 'band'), grid, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Problem'), band(space.problem.note, 'band'), h('div', { class: 'legend' }, legendItems(app, 'problem')), grid, notes.render()));
   }
   let solutionCanvas = null;
   if (space.solution.note || space.solution.dims.length) {
     const notes = footnotes();
     solutionCanvas = staticGrid(app, 'solution', notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Solution'), band(space.solution.note, 'intro'), optionLegend(app), solutionCanvas, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Solution'), band(space.solution.note, 'intro'), h('div', { class: 'legend' }, legendItems(app, 'solution')), optionLegend(app), solutionCanvas, notes.render()));
   }
   const opts = displayOptions(app);
   if (opts.length || space.criteria.items.length) {

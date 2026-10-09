@@ -19,6 +19,7 @@ This document is the contract. The reference implementation is `src/js/format.js
 zwicky: 1
 title: Car Concept
 scale: 1-5
+stages: Pilot, Rollout, Full
 updated: 2026-10-09
 ---
 
@@ -29,8 +30,9 @@ updated: 2026-10-09
 > A dimension note.
 - Urban commuters {focus}
   > A parameter note, indented two spaces.
+- Families {focus=2}
+- Long-distance travellers {focus=3}
 - Luxury segment {out}
-- Families
 
 # Solution
 
@@ -42,10 +44,10 @@ updated: 2026-10-09
 
 # Options
 
-## O1 Athletic hybrid SUV
+## O1 Athletic hybrid SUV {stage=2}
 > An option note.
 
-## O2 City coupé
+## O2 City coupé {stage=1}
 
 # Criteria
 
@@ -77,6 +79,7 @@ The file starts with a front matter block between two `---` lines. It is a stric
 | `zwicky` | Format version. Required; currently `1`. |
 | `title` | Document title. |
 | `scale` | Rating scale `<min>-<max>`, non-negative integers, `min < max ≤ 100`. Default `1-5`. |
+| `stages` | Names of the three stages, comma-separated: `stages: Pilot, Rollout, Full`. Default `Horizon 1, Horizon 2, Horizon 3`, which is not written. Names cannot contain commas. |
 | `updated` | ISO date (`YYYY-MM-DD`), set by zwicky on Save. |
 
 Other keys are kept, in their original order.
@@ -100,13 +103,16 @@ Every section except `# Notes` can carry a note directly under its heading.
 
 - A **dimension** is a `##` heading. Its title is a short buzzword.
 - A **parameter** is a list item `- Title` under its dimension. Rows can have different numbers of parameters.
-- Problem parameters can carry a **mark** tag: `{focus}` or `{out}` (out of scope).
+- Problem parameters can carry a **stage** or the **out-of-scope mark**, never both:
+  - `{focus}` is stage 1, where the scope starts; `{focus=2}` and `{focus=3}` widen it in steps. Each stage includes the ones before it. The stage names come from the `stages` front matter key.
+  - `{out}` marks a parameter out of scope.
 - Solution parameters list the options that **pick** them: `{O1 O3}`. An option picks 0..n parameters per dimension.
 
 ### Options and criteria
 
 - Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers, assigned once (highest + 1) and never renumbered.
 - A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.
+- An option can name the **stage** of the problem it addresses: `## O2 City coupé {stage=1}`, with a stage from 1 to 3. No tag means no stage.
 
 ### Ratings
 
@@ -131,7 +137,9 @@ Every section except `# Notes` can carry a note directly under its heading.
 
 | Token | Where | Meaning |
 |---|---|---|
-| `focus`, `out` | Problem parameters | Mark (one per parameter). |
+| `focus`, `focus=2`, `focus=3` | Problem parameters | Stage 1, 2 or 3. |
+| `out` | Problem parameters | Out of scope (instead of a stage). |
+| `stage=<1–3>` | Option headings | The stage of the problem the option addresses. |
 | `O<n>` | Solution parameters | Picked by option `O<n>`. |
 | `w=<int>` | Criterion headings | Weight 0–10. |
 
@@ -165,11 +173,11 @@ is read as
 This is exactly what zwicky writes:
 
 - UTF-8 without BOM, LF line endings, exactly one trailing newline, no trailing spaces.
-- Front matter keys in the order `zwicky`, `title`, `scale`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set.
+- Front matter keys in the order `zwicky`, `title`, `scale`, `stages`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set; `stages` only when the names differ from the defaults.
 - A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.
 - Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.
 - List bullets are `- `.
-- Tag tokens: the mark first, then option ids sorted numerically, then unknown tokens in their original order. `{w=1}` is omitted.
+- Tag tokens: the stage or mark first (stage 1 as `focus`), or an option's `stage=<n>`, then option ids sorted numerically, then unknown tokens in their original order. `{w=1}` is omitted.
 - Sections in the order Problem, Solution, Options, Criteria, Ratings, Notes. Empty sections are omitted.
 - In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.
 - `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).
@@ -190,7 +198,9 @@ Each of these opens fine. Items marked † add a line to the import report.
 - Scores outside the scale: clamped †. Weights outside 0–10: clamped †. Scores that are not whole numbers: left unscored †.
 - Unknown tag tokens: kept †.
 - A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.
-- A parameter with both `focus` and `out`: the first wins †.
+- A parameter with two of `focus`, `focus=<n>` and `out`: the first wins †.
+- A stage outside 1–3 (`{focus=4}`, `{stage=7}`): kept as an unknown tag †.
+- `stages` with fewer than three names: the missing ones get the defaults †; with more than three: the extra names are dropped †.
 - `###` sub-dimensions: flattened †.
 - A section repeated: merged †.
 - Unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.
@@ -198,7 +208,7 @@ Each of these opens fine. Items marked † add a line to the import report.
 
 ## Versions
 
-`zwicky: 1` in the front matter is the format version. A file with a higher version than the app supports is refused with a clear message instead of being misread. Older versions are upgraded step by step on open (the `MIGRATIONS` list in `format.js`).
+`zwicky: 1` in the front matter is the format version. Stages were added to version 1 without a version change: an older zwicky keeps `{focus=2}`, `{stage=1}` and `stages:` as unknown tags and keys, so nothing is lost. A file with a higher version than the app supports is refused with a clear message instead of being misread. Older versions are upgraded step by step on open (the `MIGRATIONS` list in `format.js`).
 
 ## Scoring (for reference)
 

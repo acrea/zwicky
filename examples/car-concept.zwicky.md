@@ -9,8 +9,8 @@ scale: 1-5
 
 ## Market
 - Urban commuters {focus}
-- Families
-- Long-distance travellers
+- Families {focus=2}
+- Long-distance travellers {focus=3}
 - Luxury segment {out}
 
 ## Constraints
@@ -80,12 +80,12 @@ scale: 1-5
 
 # Options
 
-## O1 Athletic hybrid SUV
+## O1 Athletic hybrid SUV {stage=3}
 > The classic path through the box.
 
-## O2 City coupé
+## O2 City coupé {stage=1}
 
-## O3 Family hauler
+## O3 Family hauler {stage=2}
 > Deliberately leaves the target group open.
 
 # Criteria

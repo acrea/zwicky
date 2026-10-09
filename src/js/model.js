@@ -4,17 +4,22 @@
 // Shape (plain JSON, so history can snapshot it):
 //
 //   space = {
-//     meta:      { title, scale: { min, max }, updated, extra: [[key, value], …] },
+//     meta:      { title, scale: { min, max }, stages: [name × 3], updated, extra: [[key, value], …] },
 //     problem:   { note, dims: [Dimension] },
 //     solution:  { note, dims: [Dimension] },
-//     options:   { note, items: [{ uid, id, title, note, tags }] },
+//     options:   { note, items: [{ uid, id, title, note, stage, tags }] },
 //     criteria:  { note, items: [{ uid, id, title, note, weight, tags }] },
 //     ratings:   { note, cells: { O1: { C1: { score, note, tags } } } },
 //     passthrough: [line, …],          // the "# Notes" section, verbatim
 //   }
 //
 //   Dimension = { uid, kind: 'dim', title, note, tags, children: [Parameter | Dimension] }
-//   Parameter = { uid, kind: 'param', title, note, mark, picks: [optionId], tags }
+//   Parameter = { uid, kind: 'param', title, note, stage, mark, picks: [optionId], tags }
+//
+// Stages scope the problem in steps: stage 1 is where you start, stage 2 and 3
+// widen the scope, and each includes the ones before it. A problem parameter
+// has a stage (1–3) or the mark 'out' (out of scope), never both. An option
+// has the stage of the problem it addresses. `null` means none.
 //
 // The model is a tree (§4.7): a dimension's children may in future hold
 // sub-dimensions. v1 only ever creates parameters directly under dimensions.
@@ -26,7 +31,9 @@ export const WEIGHT_MIN = 0;
 export const WEIGHT_MAX = 10;
 export const DEFAULT_WEIGHT = 1;
 export const OPTION_COLOURS = 8;
-export const MARKS = ['focus', 'out'];
+export const MARKS = ['out'];
+export const STAGES = [1, 2, 3];
+export const DEFAULT_STAGE_NAMES = Object.freeze(['Horizon 1', 'Horizon 2', 'Horizon 3']);
 export const GRID_SECTIONS = ['problem', 'solution'];
 
 let uidCounter = 0;
@@ -53,7 +60,7 @@ export function cleanTitle(title) {
 
 export function createSpace(title = '') {
   return {
-    meta: { title, scale: { ...DEFAULT_SCALE }, updated: '', extra: [] },
+    meta: { title, scale: { ...DEFAULT_SCALE }, stages: [...DEFAULT_STAGE_NAMES], updated: '', extra: [] },
     problem: { note: '', dims: [] },
     solution: { note: '', dims: [] },
     options: { note: '', items: [] },
@@ -68,11 +75,11 @@ export function createDimension(title = '', note = '') {
 }
 
 export function createParameter(title = '', note = '') {
-  return { uid: uid(), kind: 'param', title, note, mark: null, picks: [], tags: [] };
+  return { uid: uid(), kind: 'param', title, note, stage: null, mark: null, picks: [], tags: [] };
 }
 
 export function createOption(id, title = '', note = '') {
-  return { uid: uid(), id, title, note, tags: [] };
+  return { uid: uid(), id, title, note, stage: null, tags: [] };
 }
 
 export function createCriterion(id, title = '', note = '', weight = DEFAULT_WEIGHT) {
@@ -203,15 +210,15 @@ export function moveParameter(space, paramUid, toDimUid, toIndex) {
 }
 
 /**
- * What moving a dimension to the other grid section would drop: problem marks
- * (focus / out) going to the solution, option picks going to the problem.
+ * What moving a dimension to the other grid section would drop: problem stages
+ * and marks going to the solution, option picks going to the problem.
  */
 export function moveLosses(dim) {
   let marks = 0;
   let picks = 0;
   for (const { node } of walk(dim.children)) {
     if (node.kind !== 'param') continue;
-    if (node.mark) marks += 1;
+    if (node.mark || node.stage) marks += 1;
     picks += node.picks.length;
   }
   return { marks, picks };
@@ -230,17 +237,54 @@ export function moveDimensionToSection(space, dimUid, toSection) {
   found.siblings.splice(found.index, 1);
   for (const { node } of walk(dim.children)) {
     if (node.kind !== 'param') continue;
-    if (toSection === 'solution') node.mark = null;
-    else node.picks = [];
+    if (toSection === 'solution') {
+      node.mark = null;
+      node.stage = null;
+    } else node.picks = [];
   }
   space[toSection].dims.push(dim);
   return dim;
 }
 
-/** Sets a problem mark; setting the current mark again clears it. */
+/** Sets a problem mark ('out'); setting it again clears it. A mark clears the stage. */
 export function toggleMark(param, mark) {
   if (!MARKS.includes(mark)) return;
   param.mark = param.mark === mark ? null : mark;
+  if (param.mark) param.stage = null;
+}
+
+// ---------------------------------------------------------------- stages
+
+export const isStage = (n) => STAGES.includes(n);
+
+/** Sets the stage of a problem parameter or an option (null clears it). A stage clears the 'out' mark. */
+export function setStage(item, stage) {
+  item.stage = isStage(stage) ? stage : null;
+  if (item.stage && 'mark' in item) item.mark = null;
+}
+
+/** Cycles a stage: none → 1 → 2 → 3 → none. */
+export function cycleStage(item) {
+  setStage(item, item.stage === STAGES.length ? null : (item.stage || 0) + 1);
+}
+
+/** The display name of stage 1–3 in this space. */
+export function stageName(space, stage) {
+  const names = (space.meta && space.meta.stages) || DEFAULT_STAGE_NAMES;
+  return (names[stage - 1] || '').trim() || DEFAULT_STAGE_NAMES[stage - 1];
+}
+
+/** Stage names are single-line and comma-free, because the file lists them comma-separated. */
+export function cleanStageName(name) {
+  return String(name ?? '')
+    .replace(/[\r\n,]+/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** Whether an item with `stage` lies within a "scope up to stage `upTo`" filter (null = no filter). */
+export function inScope(stage, upTo) {
+  return !upTo || (isStage(stage) && stage <= upTo);
 }
 
 /** Deleting asks for a confirm only if the node (or a child) has a note or a pick (§3.1). */
@@ -288,6 +332,7 @@ export function duplicateOption(space, id) {
   const source = findOption(space, id);
   if (!source) return null;
   const copy = createOption(nextId(items), source.title, source.note);
+  copy.stage = source.stage;
   copy.tags = [...source.tags];
   items.splice(items.indexOf(source) + 1, 0, copy);
   for (const { node } of walk(space.solution.dims)) {

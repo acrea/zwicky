@@ -6,6 +6,9 @@ import {
   FORMAT_VERSION,
   DEFAULT_SCALE,
   MARKS,
+  STAGES,
+  DEFAULT_STAGE_NAMES,
+  cleanStageName,
   createSpace,
   createDimension,
   createParameter,
@@ -34,7 +37,7 @@ const SECTION_TITLES = {
   ratings: 'Ratings',
   notes: 'Notes',
 };
-const KNOWN_META = ['zwicky', 'title', 'scale', 'updated'];
+const KNOWN_META = ['zwicky', 'title', 'scale', 'stages', 'updated'];
 const SUB_SEPARATOR = ' › ';
 
 // ---------------------------------------------------------------- helpers
@@ -217,6 +220,13 @@ function parseBody(lines, report, version, rawVersion) {
           space.meta.scale = { ...DEFAULT_SCALE };
           add(ln, 'warning', `Scale "${kv.value}" is not "<min>-<max>"; using ${DEFAULT_SCALE.min}-${DEFAULT_SCALE.max}.`);
         }
+      } else if (key === 'stages') {
+        const names = kv.value.split(',').map(cleanStageName);
+        if (names.length > STAGES.length)
+          add(ln, 'warning', `Only ${STAGES.length} stages are supported; "${names.slice(STAGES.length).join(', ')}" dropped.`);
+        space.meta.stages = DEFAULT_STAGE_NAMES.map((d, i) => names[i] || d);
+        if (names.slice(0, STAGES.length).some((n) => !n) || names.length < STAGES.length)
+          add(ln, 'info', `Missing stage names filled in with the defaults: ${space.meta.stages.join(', ')}.`);
       } else {
         const existing = space.meta.extra.find((e) => e[0] === key);
         if (existing) existing[1] = kv.value;
@@ -343,7 +353,10 @@ function parseBody(lines, report, version, rawVersion) {
         const item = section === 'options' ? createOption(null, title) : createCriterion(null, title);
         for (const tok of tokens) {
           const w = /^w=(-?\d+)$/.exec(tok);
-          if (section === 'criteria' && w) {
+          const st = /^stage=(\d+)$/.exec(tok);
+          if (section === 'options' && st && STAGES.includes(Number(st[1])) && !item.stage) {
+            item.stage = Number(st[1]);
+          } else if (section === 'criteria' && w) {
             const weight = clampWeight(Number(w[1]));
             if (weight !== Number(w[1])) add(ln, 'warning', `Weight ${w[1]} is outside 0–10; set to ${weight}.`);
             item.weight = weight;
@@ -414,10 +427,17 @@ function parseBody(lines, report, version, rawVersion) {
         const param = createParameter(sub ? sub.title + SUB_SEPARATOR + title : title);
         for (const tok of tokens) {
           const pick = /^O(\d+)$/.exec(tok);
-          if (section === 'problem' && MARKS.includes(tok)) {
-            if (param.mark && param.mark !== tok)
-              add(ln, 'warning', `Parameter has both "${param.mark}" and "${tok}"; kept "${param.mark}".`);
+          const focus = /^focus(?:=(\d+))?$/.exec(tok);
+          const stage = focus ? Number(focus[1] || 1) : null;
+          if (section === 'problem' && (MARKS.includes(tok) || (focus && STAGES.includes(stage)))) {
+            const current = param.stage ? stageTag(param.stage) : param.mark;
+            if (current) {
+              if (current !== tok) add(ln, 'warning', `Parameter has both "${current}" and "${tok}"; kept "${current}".`);
+            } else if (focus) param.stage = stage;
             else param.mark = tok;
+          } else if (section === 'problem' && focus) {
+            param.tags.push(tok);
+            add(ln, 'warning', `Stage ${focus[1]} does not exist (only 1–${STAGES.length}); "${tok}" kept as an unknown tag.`);
           } else if (section === 'solution' && pick) {
             const id = Number(pick[1]);
             if (pickRefs.some((r) => r.param === param && r.id === id)) add(ln, 'info', `Duplicate pick O${id} removed.`);
@@ -547,6 +567,11 @@ function parseBody(lines, report, version, rawVersion) {
 
 // ---------------------------------------------------------------- serialize
 
+/** The tag for a problem stage: "focus" for stage 1, "focus=2" and "focus=3" for the others. */
+function stageTag(stage) {
+  return stage === 1 ? 'focus' : 'focus=' + stage;
+}
+
 function tagGroup(tokens) {
   return tokens.length ? ' {' + tokens.join(' ') + '}' : '';
 }
@@ -571,6 +596,8 @@ export function serialize(space) {
   if (title) out.push(`title: ${title}`);
   const scale = meta.scale || DEFAULT_SCALE;
   out.push(`scale: ${scale.min}-${scale.max}`);
+  const stages = DEFAULT_STAGE_NAMES.map((d, i) => cleanStageName((meta.stages || [])[i]) || d);
+  if (stages.some((n, i) => n !== DEFAULT_STAGE_NAMES[i])) out.push(`stages: ${stages.join(', ')}`);
   const updated = cleanValue(meta.updated);
   if (updated) out.push(`updated: ${updated}`);
   for (const [k, v] of meta.extra || []) {
@@ -600,7 +627,8 @@ export function serialize(space) {
         continue;
       }
       const tokens = [];
-      if (key === 'problem' && MARKS.includes(c.mark)) tokens.push(c.mark);
+      if (key === 'problem' && STAGES.includes(c.stage)) tokens.push(stageTag(c.stage));
+      else if (key === 'problem' && MARKS.includes(c.mark)) tokens.push(c.mark);
       if (key === 'solution')
         for (const id of [...c.picks].sort((a, b) => a - b)) if (optionIds.has(id)) tokens.push('O' + id);
       tokens.push(...c.tags);
@@ -625,7 +653,7 @@ export function serialize(space) {
     heading('# Options');
     note(space.options.note, '');
     for (const o of space.options.items) {
-      heading(itemLine('## O' + o.id, o.title, o.tags));
+      heading(itemLine('## O' + o.id, o.title, STAGES.includes(o.stage) ? ['stage=' + o.stage, ...o.tags] : o.tags));
       note(o.note, '');
     }
   }
