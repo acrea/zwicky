@@ -14,6 +14,10 @@ import {
   nodeHasContent,
   toggleMark,
   togglePick,
+  setStage,
+  cycleStage,
+  stageName,
+  inScope,
   findOption,
   optionColour,
   coordinate,
@@ -145,14 +149,18 @@ export function renderGrid(app, section) {
       const cls = ['param', p.note && 'has-note'];
       let style = null;
       const markers = [];
-      if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
+      if (section === 'problem') {
+        if (p.stage) cls.push('stage-' + p.stage);
+        else if (p.mark) cls.push('mark-' + p.mark);
+        if (!inScope(p.stage, state.scopeUpTo)) cls.push('beyond-scope');
+      }
       if (solution) {
         if (active !== null && p.picks.includes(active)) {
           cls.push('picked');
           style = optionVars(active);
         }
         for (const o of options) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
+          if (o.id === active || !p.picks.includes(o.id) || !inScope(o.stage, state.scopeUpTo)) continue;
           const { style: ls } = optionColour(o.id);
           markers.push(
             h(
@@ -166,8 +174,8 @@ export function renderGrid(app, section) {
       const coord = coordinate(r, c);
       const label = [
         `${coord}: ${p.title}`,
-        p.mark === 'focus' && 'focus',
-        p.mark === 'out' && 'out of scope',
+        section === 'problem' && p.stage && stageName(space, p.stage),
+        section === 'problem' && p.mark === 'out' && 'out of scope',
         solution && p.picks.length && 'picked by ' + p.picks.map((id) => 'O' + id).join(', '),
         p.note && 'has note',
       ]
@@ -467,9 +475,14 @@ export function gridKeydown(app, section, e) {
     else app.toast('Select a dimension (its row title) to move it with M.');
     return true;
   }
-  if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x')) {
+  if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x' || /^[0-3]$/.test(key))) {
     const { node } = findNode(space, sel.uid);
-    app.change(() => toggleMark(node, key === 'f' ? 'focus' : 'out'));
+    if (key === 'f') app.change(() => cycleStage(node));
+    else if (key === 'x') app.change(() => toggleMark(node, 'out'));
+    else {
+      const n = Number(key);
+      app.change(() => setStage(node, n === node.stage ? null : n));
+    }
     return true;
   }
   if (section === 'solution' && sel.type === 'param') {
@@ -521,7 +534,7 @@ export async function moveToOtherSection(app, section, sel, pos) {
   const { marks, picks } = moveLosses(found.node);
   const lost =
     to === 'solution' && marks
-      ? `${plural(marks, 'focus / out-of-scope mark is', 'focus / out-of-scope marks are')} removed, because the solution space has no marks.`
+      ? `${plural(marks, 'parameter loses its', 'parameters lose their')} stage or out-of-scope mark, because the solution space has neither.`
       : to === 'problem' && picks
         ? `${plural(picks, 'pick by an option is', 'picks by options are')} removed, because the problem space has no picks. Ratings stay as they are.`
         : '';

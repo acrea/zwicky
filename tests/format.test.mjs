@@ -34,12 +34,12 @@ test('car concept: parsed content', () => {
   const market = space.problem.dims[0];
   assert.equal(market.title, 'Market');
   assert.deepEqual(
-    market.children.map((p) => [p.title, p.mark]),
+    market.children.map((p) => [p.title, p.stage, p.mark]),
     [
-      ['Urban commuters', 'focus'],
-      ['Families', null],
-      ['Long-distance travellers', null],
-      ['Luxury segment', 'out'],
+      ['Urban commuters', 1, null],
+      ['Families', 2, null],
+      ['Long-distance travellers', 3, null],
+      ['Luxury segment', null, 'out'],
     ],
   );
   const target = space.solution.dims.find((d) => d.title === 'Target group');
@@ -264,7 +264,7 @@ test('parsing never throws on garbage', () => {
 test('serialize(parse(serialize(s))) === serialize(s) for an edited space', () => {
   const s = createSpace('  Edited\nspace  ');
   const d = addDimension(s, 'problem', 0, 'Dim {x}');
-  addParameter(s, d.uid, 0, '{focus}').mark = 'focus';
+  addParameter(s, d.uid, 0, '{focus}').stage = 1;
   addParameter(s, d.uid, 1, 'ends with \\{y}');
   addParameter(s, d.uid, 2, '  spaced  \n title ');
   const p = addParameter(s, d.uid, 3, 'with note');
@@ -283,7 +283,7 @@ test('serialize(parse(serialize(s))) === serialize(s) for an edited space', () =
     ['(focus)', 'ends with \\{y}', 'spaced title', 'with note'],
   );
   assert.equal(back.problem.dims[0].title, 'Dim (x)');
-  assert.equal(back.problem.dims[0].children[0].mark, 'focus');
+  assert.equal(back.problem.dims[0].children[0].stage, 1);
   assert.equal(back.problem.dims[0].children[3].note, '  indented\nline two');
   assert.equal(back.options.items[0].title, 'Opt (beta)');
   assert.equal(back.ratings.cells.O1.C1.score, 5);
@@ -303,7 +303,7 @@ test('a trailing {…} after the tag group is read as part of the title and fixe
   const { space, report } = parse('---\nzwicky: 1\n---\n# Problem\n## D\n- Budget {in CHF} {focus}\n');
   const p = space.problem.dims[0].children[0];
   assert.equal(p.title, 'Budget (in CHF)');
-  assert.equal(p.mark, 'focus');
+  assert.equal(p.stage, 1);
   assert.equal(report.length, 1);
   assert.equal(report[0].level, 'info');
 });
@@ -342,4 +342,71 @@ test('normNote and fileName', () => {
   assert.equal(fileName('Slide-Generator (intern)'), 'slide-generator-intern.zwicky.md');
   assert.equal(fileName('Größe & Übersicht'), 'grosse-ubersicht.zwicky.md');
   assert.equal(fileName(''), 'untitled.zwicky.md');
+});
+
+// ---------------------------------------------------------------- stages
+
+test('stages: {focus} is stage 1, {focus=2} and {focus=3} the later ones; options carry {stage=n}', () => {
+  const text = [
+    '---',
+    'zwicky: 1',
+    'scale: 1-5',
+    'stages: Pilot, Rollout, Full',
+    '---',
+    '',
+    '# Problem',
+    '',
+    '## Market',
+    '- Commuters {focus}',
+    '- Families {focus=2}',
+    '- Travellers {focus=3}',
+    '- Luxury {out}',
+    '- Fleet',
+    '',
+    '# Options',
+    '',
+    '## O1 Small start {stage=1}',
+    '',
+    '## O2 Everything {stage=3 later}',
+    '',
+    '## O3 Unstaged',
+    '',
+  ].join('\n');
+  const { space, report } = parse(text);
+  assert.deepEqual(report.filter((r) => r.level !== 'info'), []);
+  assert.deepEqual(space.meta.stages, ['Pilot', 'Rollout', 'Full']);
+  assert.deepEqual(
+    space.problem.dims[0].children.map((p) => [p.stage, p.mark]),
+    [[1, null], [2, null], [3, null], [null, 'out'], [null, null]],
+  );
+  assert.deepEqual(space.options.items.map((o) => [o.stage, o.tags]), [[1, []], [3, ['later']], [null, []]]);
+  assert.equal(serialize(space), text);
+});
+
+test('default stage names are not written; partial or extra names are reported', () => {
+  assert.doesNotMatch(serialize(createSpace()), /stages:/);
+  const s = createSpace();
+  s.meta.stages = ['Horizon 1', 'Horizon 2', 'Horizon 3'];
+  assert.doesNotMatch(serialize(s), /stages:/);
+  s.meta.stages = ['Now, today', ' Next\n', 'Later'];
+  assert.match(serialize(s), /\nstages: Now today, Next, Later\n/);
+
+  const few = parse('---\nzwicky: 1\nstages: Now\n---\n');
+  assert.deepEqual(few.space.meta.stages, ['Now', 'Horizon 2', 'Horizon 3']);
+  assert.ok(few.report.some((r) => /filled in with the defaults/.test(r.message)));
+  const many = parse('---\nzwicky: 1\nstages: A, B, C, D\n---\n');
+  assert.deepEqual(many.space.meta.stages, ['A', 'B', 'C']);
+  assert.ok(many.report.some((r) => r.level === 'warning' && /"D" dropped/.test(r.message)));
+});
+
+test('invalid stages and conflicting marks are reported and nothing is lost', () => {
+  const { space, report } = parse('---\nzwicky: 1\n---\n# Problem\n## D\n- A {focus=4}\n- B {focus=2 out}\n- C {out focus}\n# Options\n## O1 X {stage=7}\n');
+  const [a, b, c] = space.problem.dims[0].children;
+  assert.deepEqual([a.stage, a.tags], [null, ['focus=4']]);
+  assert.deepEqual([b.stage, b.mark], [2, null]);
+  assert.deepEqual([c.stage, c.mark], [null, 'out']);
+  assert.deepEqual([space.options.items[0].stage, space.options.items[0].tags], [null, ['stage=7']]);
+  assert.ok(report.some((r) => /Stage 4 does not exist/.test(r.message)));
+  assert.ok(report.some((r) => /both "focus=2" and "out"; kept "focus=2"/.test(r.message)));
+  assert.ok(report.some((r) => /both "out" and "focus"; kept "out"/.test(r.message)));
 });

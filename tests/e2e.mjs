@@ -59,21 +59,32 @@ await check('loads the car concept demo on first launch', async () => {
   assert.equal(await page.locator('.cell.dim:not(.ghost)').count(), 2);
 });
 
-await check('problem: click selects, F marks focus, X marks out, again clears', async () => {
+await check('problem: digits set a stage, F cycles, X marks out of scope', async () => {
+  const has = (cls) => cell('Families').evaluate((el, c) => el.classList.contains(c), cls);
   await cell('Families').click();
+  assert.ok(await has('stage-2'), 'the demo has Families at stage 2');
+  await page.keyboard.press('0');
+  assert.ok(!(await has('stage-2')));
   await page.keyboard.press('f');
-  assert.ok(await cell('Families').evaluate((el) => el.classList.contains('mark-focus')));
+  assert.ok(await has('stage-1'));
+  await page.keyboard.press('f');
+  assert.ok(await has('stage-2'));
+  await page.keyboard.press('3');
+  assert.ok(await has('stage-3'));
   await page.keyboard.press('x');
-  assert.ok(await cell('Families').evaluate((el) => el.classList.contains('mark-out')));
+  assert.ok((await has('mark-out')) && !(await has('stage-3')), 'out of scope replaces the stage');
   await page.keyboard.press('x');
-  assert.ok(!(await cell('Families').evaluate((el) => el.classList.contains('mark-out'))));
+  assert.ok(!(await has('mark-out')));
+  await page.keyboard.press('2');
+  assert.ok(await has('stage-2'));
+  assert.match(await page.locator('.inspector').innerText(), /Horizon 2/);
 });
 
 await check('undo and redo', async () => {
   await page.keyboard.press('Control+z');
-  assert.ok(await cell('Families').evaluate((el) => el.classList.contains('mark-out')));
+  assert.ok(!(await cell('Families').evaluate((el) => el.classList.contains('stage-2'))));
   await page.keyboard.press('Control+Shift+z');
-  assert.ok(!(await cell('Families').evaluate((el) => el.classList.contains('mark-out'))));
+  assert.ok(await cell('Families').evaluate((el) => el.classList.contains('stage-2')));
 });
 
 await check('Enter edits a title inline; Enter commits; Esc cancels', async () => {
@@ -349,7 +360,7 @@ await check('M moves a problem dimension to the solution; a confirm names the dr
   await dim('Market').click();
   await page.keyboard.press('m');
   await page.locator('dialog[open]').waitFor();
-  assert.match(await page.locator('dialog[open]').innerText(), /marks? (is|are) removed/);
+  assert.match(await page.locator('dialog[open]').innerText(), /(loses its|lose their) stage or out-of-scope mark/);
   await page.getByRole('button', { name: 'Move', exact: true }).click();
   await page.waitForFunction(() => window.zwicky.space.solution.dims.at(-1).title === 'Market');
   const s = await space();
@@ -383,6 +394,57 @@ await check('the inspector moves a solution dimension to the problem; cancel kee
   assert.match(await md(), /# Problem[\s\S]*## Drivetrain[\s\S]*# Solution/);
   await page.keyboard.press('Control+z');
   assert.ok((await space()).solution.dims.some((d) => d.title === 'Drivetrain'));
+});
+
+await check('legend names the stages; the scope filter greys out later stages and their options', async () => {
+  await page.click('#tab-problem');
+  const legend = await page.locator('.legend').innerText();
+  for (const t of ['Rows', 'Cells', 'Horizon 1', 'Horizon 2', 'Horizon 3', 'Out of scope']) assert.ok(legend.includes(t), t);
+  const beyond = (title) => cell(title).evaluate((el) => el.classList.contains('beyond-scope'));
+  await page.locator('.scope-filter').getByRole('button', { name: 'Horizon 1' }).click();
+  assert.equal(await beyond('Urban commuters'), false);
+  assert.equal(await beyond('Long-distance travellers'), true);
+  assert.equal(await beyond('Luxury segment'), true);
+  await page.locator('.scope-filter').getByRole('button', { name: 'Horizon 3' }).click();
+  assert.equal(await beyond('Long-distance travellers'), false);
+  assert.equal(await beyond('Luxury segment'), true);
+  await page.click('#tab-solution');
+  await page.locator('.scope-filter').getByRole('button', { name: 'Horizon 2' }).click();
+  const chipBeyond = (id) => page.locator('.chip', { hasText: id }).evaluate((el) => el.classList.contains('beyond-scope'));
+  assert.equal(await chipBeyond('O1'), true, 'O1 addresses stage 3');
+  assert.equal(await chipBeyond('O2'), false);
+  assert.match(await page.locator('.chip', { hasText: 'O2' }).innerText(), /Horizon 1/);
+  await page.locator('.scope-filter').getByRole('button', { name: 'All' }).click();
+  assert.equal(await chipBeyond('O1'), false);
+});
+
+await check('the stage of an option is set in the inspector and saved as {stage=n}', async () => {
+  await page.click('#tab-solution');
+  await page.locator('.chip', { hasText: 'O2' }).dblclick();
+  await page.keyboard.press('Escape');
+  await page.locator('.inspector').getByRole('button', { name: 'Horizon 2' }).click();
+  assert.match(await md(), /## O2 City coupé \{stage=2\}/);
+  await page.locator('.inspector').getByRole('button', { name: 'Horizon 2' }).click();
+  assert.match(await md(), /## O2 City coupé\n/);
+  await page.keyboard.press('Control+z');
+  assert.match(await md(), /## O2 City coupé \{stage=2\}/);
+  await page.keyboard.press('Control+z');
+  assert.match(await md(), /## O2 City coupé \{stage=1\}/);
+});
+
+await check('renaming the stages updates the legend and the file', async () => {
+  await page.click('#tab-problem');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  await page.keyboard.press('Escape');
+  const input = page.locator('.inspector input.stage-1');
+  await input.fill('Pilot');
+  await input.blur();
+  await page.waitForTimeout(50);
+  assert.match(await page.locator('.legend').innerText(), /Pilot/);
+  assert.match(await md(), /\nstages: Pilot, Horizon 2, Horizon 3\n/);
+  await page.keyboard.press('Control+z');
+  assert.doesNotMatch(await md(), /stages:/);
 });
 
 await check('every example opens without a report and saves back byte-identically (apart from updated)', async () => {

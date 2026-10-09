@@ -10,8 +10,8 @@ A browser-only tool to span a problem space, span a solution space, compose solu
 
 Or open [`dist/zwicky.html`](dist/zwicky.html) in a current browser. That one file (about 520 KB, fonts included) is the whole app. It works when opened from disk (`file://`), on GitHub Pages or on any web server, and it makes no network requests.
 
-1. **Problem.** Write the problem statement, then lay out the problem space as dimensions (rows) × parameters (cells). Mark parameters as focus (`F`) or out of scope (`X`).
-2. **Solution.** Lay out the solution space the same way. Add options, click an option's chip, then click the parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through the box; *Compare* draws all options at once, and *Line styles* adds dash patterns for greyscale printing.
+1. **Problem.** Write the problem statement, then lay out the problem space as dimensions (rows) × parameters (cells). Scope it in up to three stages (Horizon 1–3 by default, renamable): `1`–`3` or `F` give a parameter its stage, `X` marks it out of scope. The legend above the grid explains the tints, and *Scope up to* greys out what lies beyond a stage.
+2. **Solution.** Lay out the solution space the same way. Add options, click an option's chip, then click the parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through the box; *Compare* draws all options at once, and *Line styles* adds dash patterns for greyscale printing. In the option's inspector, set the stage of the problem it addresses.
 3. **Evaluation.** Compare the options' profiles side by side, add criteria with weights (0–10), and rate every option against every criterion. Every rating can carry a note with the rationale or assumption. zwicky computes the weighted score and the rank.
 
 Every item (dimension, parameter, option, criterion, rating) can hold a plain-text note. Select something to edit it in the inspector on the right (`I` shows or hides it). Press `?` for help, the keyboard shortcuts and the examples.
@@ -28,7 +28,8 @@ Every item (dimension, parameter, option, criterion, rating) can hold a plain-te
 | Delete | Delete the selected item (asks first if it has a note or picks) |
 | Alt + ↑ ↓ / ← → | Move a dimension or criterion / a parameter |
 | M | Move the selected dimension between the problem and the solution space |
-| F, X | Problem: mark focus / out of scope |
+| 1 – 3, 0 | Problem: set the stage of a parameter, clear it |
+| F, X | Problem: cycle the stage / mark out of scope |
 | 1 – 9 | Solution: toggle the pick of O1 – O9. Evaluation: set a score or weight |
 | Space | Pick mode: toggle the pick of the active option |
 | + / − | Evaluation: raise or lower a score or weight |

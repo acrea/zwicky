@@ -560,12 +560,23 @@ svg.paths {
   padding-top: 10px;
 }
 
-/* states: selected, focus, out, picked */
-.cell.mark-focus {
-  background: var(--mark-focus-bg);
+/* states: selected, stages, out, picked, beyond the scope filter */
+.cell.stage-1 {
+  background: var(--stage-1-bg);
 }
-.cell.mark-focus .title {
+.cell.stage-1 .title {
   font-weight: 600;
+}
+.cell.stage-2 {
+  background: var(--stage-2-bg);
+}
+.cell.stage-3 {
+  background: var(--stage-3-bg);
+}
+.cell.beyond-scope > :not(.coord),
+.chip.beyond-scope,
+.opt-head.beyond-scope > * {
+  opacity: var(--beyond-scope-opacity);
 }
 .cell.mark-out .title {
   color: var(--mark-out-ink);
@@ -667,6 +678,9 @@ svg.paths {
   font-family: var(--font-mono);
   font-size: var(--fs-xs);
   color: var(--ink-muted);
+}
+.chip .stage-pill {
+  flex-shrink: 0;
 }
 .chip-title {
   overflow: hidden;
@@ -879,6 +893,103 @@ textarea.field-input {
 .segmented {
   display: flex;
   gap: var(--space-1);
+}
+.stage-choice {
+  flex-wrap: wrap;
+}
+.toggle.stage-1:not([aria-pressed='true']),
+.stage-pill.stage-1,
+.legend-swatch.stage-1 {
+  background: var(--stage-1-bg);
+}
+.toggle.stage-2:not([aria-pressed='true']),
+.stage-pill.stage-2,
+.legend-swatch.stage-2 {
+  background: var(--stage-2-bg);
+}
+.toggle.stage-3:not([aria-pressed='true']),
+.stage-pill.stage-3,
+.legend-swatch.stage-3 {
+  background: var(--stage-3-bg);
+}
+.stage-toggle {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.stage-toggle[aria-pressed='true'] kbd {
+  background: transparent;
+  color: inherit;
+  border-color: currentColor;
+}
+.stage-pill {
+  display: inline-block;
+  padding: 0 7px;
+  border-radius: 999px;
+  border: 1px solid var(--rule);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  color: var(--ink);
+  white-space: nowrap;
+}
+.stage-names {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.stage-names .field-label {
+  font-size: var(--fs-xs);
+}
+
+/* legend and scope filter above the grids */
+.legend-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-5);
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 14px;
+  font-family: var(--font-ui);
+  font-size: var(--fs-xs);
+  color: var(--ink-muted);
+}
+.legend strong {
+  color: var(--ink);
+  font-weight: 600;
+}
+.legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+.legend-swatch {
+  width: 16px;
+  height: 11px;
+  border: 1px solid var(--rule);
+}
+.legend-out {
+  color: var(--mark-out-ink);
+  text-decoration: line-through;
+}
+.eval-bar .scope-filter {
+  margin-left: var(--space-4);
+}
+.scope-filter {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.scope-filter .toggle {
+  font-size: var(--fs-xs);
 }
 .mark-toggle {
   display: inline-flex;
@@ -1233,6 +1344,10 @@ textarea.field-input {
   text-align: left;
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
+}
+.opt-head > .stage-pill {
+  display: table;
+  margin: -4px 0 8px var(--cell-pad-x);
 }
 .opt-head-btn:hover {
   background: var(--bg-subtle);

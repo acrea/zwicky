@@ -8,6 +8,11 @@ import {
   optionProfile,
   togglePick,
   toggleMark,
+  setStage,
+  stageName,
+  cleanStageName,
+  STAGES,
+  DEFAULT_STAGE_NAMES,
   coordinate,
   rowLetter,
   parametersOf,
@@ -137,18 +142,17 @@ function nodeInspector(app, { kind, found, section }) {
     out.push(head('Parameter', `${ref} · ${parent.title || 'Untitled dimension'}`));
     out.push(titleField(app, node), noteField(app, node));
     if (section === 'problem') {
-      const mark = (m, label, key) =>
-        h(
-          'button',
-          {
-            class: ['toggle', 'mark-toggle', 'mark-' + m],
-            'aria-pressed': node.mark === m ? 'true' : 'false',
-            onclick: () => app.change(() => toggleMark(node, m)),
-          },
-          label,
-          h('kbd', null, key),
-        );
-      out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Mark'), h('div', { class: 'segmented' }, mark('focus', 'Focus', 'F'), mark('out', 'Out of scope', 'X'))));
+      const outButton = h(
+        'button',
+        {
+          class: ['toggle', 'mark-toggle', 'mark-out'],
+          'aria-pressed': node.mark === 'out' ? 'true' : 'false',
+          onclick: () => app.change(() => toggleMark(node, 'out')),
+        },
+        'Out of scope',
+        h('kbd', null, 'X'),
+      );
+      out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, node, true), outButton)));
     } else {
       const list = h('div', { class: 'pick-list' });
       for (const o of space.options.items) {
@@ -187,10 +191,27 @@ function nodeInspector(app, { kind, found, section }) {
   return out;
 }
 
+/** One toggle per stage; pressing the current stage clears it. */
+function stageButtons(app, item, withKeys) {
+  return STAGES.map((n) =>
+    h(
+      'button',
+      {
+        class: ['toggle', 'stage-toggle', 'stage-' + n],
+        'aria-pressed': item.stage === n ? 'true' : 'false',
+        onclick: () => app.change(() => setStage(item, item.stage === n ? null : n)),
+      },
+      stageName(app.space, n),
+      withKeys ? h('kbd', null, String(n)) : null,
+    ),
+  );
+}
+
 function optionInspector(app, option) {
   const { space, state } = app;
   const out = [head('Option', null, h('span', { class: 'insp-ref option-ref' }, swatch(option.id, state.lineStyles), 'O' + option.id))];
   out.push(titleField(app, option), noteField(app, option, 'Note', 'What is the idea behind this option?'));
+  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Addresses stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, option, false))));
   const active = state.activeOption === option.id;
   out.push(
     h(
@@ -288,6 +309,20 @@ function documentInspector(app) {
       },
     });
   out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Rating scale'), h('div', { class: 'scale-row' }, scaleInput('min'), h('span', null, 'to'), scaleInput('max'))));
+  const stageNames = h('div', { class: 'stage-names' });
+  for (const n of STAGES) {
+    stageNames.append(
+      field(app, {
+        label: `Stage ${n}`,
+        value: meta.stages[n - 1],
+        placeholder: DEFAULT_STAGE_NAMES[n - 1],
+        cls: 'stage-' + n,
+        onInput: (v) => (meta.stages[n - 1] = v),
+        onCommit: (v) => (meta.stages[n - 1] = cleanStageName(v) || DEFAULT_STAGE_NAMES[n - 1]),
+      }),
+    );
+  }
+  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage names'), stageNames));
   if (meta.updated) out.push(h('p', { class: 'insp-meta' }, 'Last saved ' + meta.updated));
   if (meta.extra.length) {
     const dl = h('dl', { class: 'profile' });

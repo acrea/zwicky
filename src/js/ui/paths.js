@@ -3,7 +3,7 @@
 // with the grid and only needs redrawing when the layout changes.
 
 import { s, clear } from './dom.js';
-import { parametersOf } from '../model.js';
+import { parametersOf, inScope } from '../model.js';
 import { optionStyle } from './grid.js';
 
 /** Cell centres of an option's picks: row by row, left to right within a row. */
@@ -27,7 +27,11 @@ export function drawPaths(app, canvas) {
   clear(svg);
   const { state, space } = app;
   const active = state.activeOption;
-  const ids = state.compare ? space.options.items.map((o) => o.id) : active !== null ? [active] : [];
+  const ids = state.compare
+    ? space.options.items.filter((o) => o.id === active || inScope(o.stage, state.scopeUpTo)).map((o) => o.id)
+    : active !== null
+      ? [active]
+      : [];
   if (!ids.length) return;
 
   const origin = canvas.getBoundingClientRect();

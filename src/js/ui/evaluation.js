@@ -17,6 +17,7 @@ import {
 } from '../model.js';
 import { optionVars, selKey, NAV_KEYS } from './grid.js';
 import { swatch } from './options-bar.js';
+import { stagePill, optionBeyondScope, scopeFilter } from './legend.js';
 import { field } from './inspector.js';
 
 // ---------------------------------------------------------------- helpers
@@ -78,6 +79,7 @@ export function renderEvalHead(app) {
     toggle('sortByRank', 'Sort options by rank', 'Order the columns by rank. The stored order does not change.'),
     toggle('showNotes', 'Show all notes', 'Show every rating note under its score, for reviews and printing'),
     toggle('heatmap', 'Heatmap', 'Tint scores by value'),
+    scopeFilter(app),
   );
 }
 
@@ -85,13 +87,14 @@ function optionHead(app, o, extra) {
   return h(
     'th',
     {
-      class: 'opt-head',
+      class: ['opt-head', optionBeyondScope(app, o) && 'beyond-scope'],
       scope: 'col',
       style: optionVars(o.id),
       title: o.note || null,
       dataset: { option: String(o.id) },
     },
     h('button', { class: 'opt-head-btn', onclick: () => app.inspectOption(o.id) }, swatch(o.id, app.state.lineStyles), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: ['opt-title', !o.title && 'empty'] }, o.title || 'Untitled')),
+    stagePill(app.space, o.stage),
     extra,
   );
 }

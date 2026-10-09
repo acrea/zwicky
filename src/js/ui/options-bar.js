@@ -4,6 +4,7 @@
 import { h, s } from './dom.js';
 import { addOption, moveItem } from '../model.js';
 import { optionVars, optionStyle } from './grid.js';
+import { stagePill, optionBeyondScope } from './legend.js';
 
 /** A small colour swatch that also shows the option's line style. */
 export function swatch(id, lineStyles = false) {
@@ -28,7 +29,7 @@ export function renderOptionsBar(app) {
     const chip = h(
       'button',
       {
-        class: ['chip', active && 'active', active && state.pickMode && 'picking'],
+        class: ['chip', active && 'active', active && state.pickMode && 'picking', optionBeyondScope(app, o) && 'beyond-scope'],
         style: optionVars(o.id),
         draggable: 'true',
         'aria-pressed': active ? 'true' : 'false',
@@ -44,6 +45,7 @@ export function renderOptionsBar(app) {
       swatch(o.id, state.lineStyles),
       h('span', { class: 'id' }, 'O' + o.id),
       h('span', { class: ['chip-title', !o.title && 'empty'] }, o.title || 'Untitled'),
+      stagePill(space, o.stage),
     );
     chips.append(chip);
   }

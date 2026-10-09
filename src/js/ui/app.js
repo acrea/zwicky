@@ -8,6 +8,7 @@ import * as store from '../store.js';
 import { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt, moveToOtherSection } from './grid.js';
 import { drawPaths, watchPaths } from './paths.js';
 import { renderOptionsBar } from './options-bar.js';
+import { renderLegend } from './legend.js';
 import { renderInspector, inspectedKey, field } from './inspector.js';
 import { SHORTCUTS } from './shortcuts.js';
 import { preparePrint, cleanupPrint } from './print.js';
@@ -50,6 +51,7 @@ const app = {
     pickMode: false,
     compare: !!prefs.compare,
     lineStyles: !!prefs.lineStyles,
+    scopeUpTo: null, // view filter: grey out what lies beyond stage n (not saved)
     evalView: { sortByRank: false, showNotes: false, heatmap: false, ...(prefs.evalView || {}) },
     inspectorOpen: prefs.inspectorOpen !== false,
     density: DENSITIES.includes(prefs.density) ? prefs.density : 'normal',
@@ -210,6 +212,11 @@ app.focusInspectorField = (id) => {
     el.focus();
     if (el.select && el.tagName === 'INPUT') el.select();
   }
+};
+
+app.setScope = (upTo) => {
+  app.state.scopeUpTo = upTo;
+  app.render();
 };
 
 app.setView = (patch) => {
@@ -436,10 +443,14 @@ function renderMain() {
   if (!focusInHead) {
     clear(els.head);
     els.head.dataset.tab = tab;
-    if (tab === 'problem') els.head.append(noteBand(app.space.problem, 'Problem statement', 'What problem are we solving? Write the problem statement here.', 'band'));
+    if (tab === 'problem') {
+      els.head.append(noteBand(app.space.problem, 'Problem statement', 'What problem are we solving? Write the problem statement here.', 'band'));
+      els.head.append(renderLegend(app, 'problem'));
+    }
     if (tab === 'solution') {
       els.head.append(noteBand(app.space.solution, 'Solution intro', 'Optional intro note for the solution space.', 'intro'));
       els.head.append(renderOptionsBar(app));
+      els.head.append(renderLegend(app, 'solution'));
     }
     if (tab === 'evaluation') els.head.append(renderEvalHead(app));
   }

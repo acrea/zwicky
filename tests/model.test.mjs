@@ -31,6 +31,10 @@ import {
   clone,
   moveDimensionToSection,
   moveLosses,
+  setStage,
+  cycleStage,
+  stageName,
+  inScope,
 } from '../src/js/model.js';
 
 const car = () => parse(readFileSync(new URL('../examples/car-concept.zwicky.md', import.meta.url), 'utf8')).space;
@@ -242,8 +246,8 @@ test('marks toggle; picks toggle and stay sorted', () => {
   const s = createSpace();
   const d = addDimension(s, 'problem');
   const p = addParameter(s, d.uid);
-  toggleMark(p, 'focus');
-  assert.equal(p.mark, 'focus');
+  toggleMark(p, 'focus'); // no longer a mark: stages replace it
+  assert.equal(p.mark, null);
   toggleMark(p, 'out');
   assert.equal(p.mark, 'out');
   toggleMark(p, 'out');
@@ -306,11 +310,11 @@ test('a solution dimension moves to the problem with its parameters and notes; p
 test('a problem dimension moves to the solution; marks are dropped', () => {
   const s = car();
   const market = s.problem.dims[0];
-  assert.deepEqual(moveLosses(market), { marks: 2, picks: 0 });
+  assert.deepEqual(moveLosses(market), { marks: 4, picks: 0 });
   moveDimensionToSection(s, market.uid, 'solution');
   assert.equal(s.problem.dims.includes(market), false);
   assert.equal(s.solution.dims.at(-1), market);
-  assert.ok(market.children.every((p) => p.mark === null));
+  assert.ok(market.children.every((p) => p.mark === null && p.stage === null));
   assert.deepEqual(moveLosses(market), { marks: 0, picks: 0 });
 });
 
@@ -323,4 +327,43 @@ test('moving a dimension to its own section, a parameter or an unknown uid does 
   assert.equal(moveDimensionToSection(s, 'nope', 'solution'), null);
   assert.equal(moveDimensionToSection(s, dim.uid, 'options'), null);
   assert.deepEqual(s, before);
+});
+
+// ---------------------------------------------------------------- stages
+
+test('stages: set, cycle, and exclusive with the out-of-scope mark', () => {
+  const s = createSpace();
+  const p = addParameter(s, addDimension(s, 'problem').uid);
+  cycleStage(p);
+  assert.equal(p.stage, 1);
+  cycleStage(p);
+  cycleStage(p);
+  assert.equal(p.stage, 3);
+  cycleStage(p);
+  assert.equal(p.stage, null);
+  setStage(p, 2);
+  toggleMark(p, 'out');
+  assert.deepEqual([p.stage, p.mark], [null, 'out']);
+  setStage(p, 1);
+  assert.deepEqual([p.stage, p.mark], [1, null]);
+  setStage(p, 4);
+  assert.equal(p.stage, null);
+  const o = addOption(s, 'x');
+  setStage(o, 2);
+  assert.equal(o.stage, 2);
+  assert.ok(!('mark' in o));
+  assert.equal(duplicateOption(s, o.id).stage, 2);
+});
+
+test('stage names and the scope filter', () => {
+  const s = createSpace();
+  assert.deepEqual([1, 2, 3].map((n) => stageName(s, n)), ['Horizon 1', 'Horizon 2', 'Horizon 3']);
+  s.meta.stages = ['Pilot', '  ', 'Full'];
+  assert.deepEqual([1, 2, 3].map((n) => stageName(s, n)), ['Pilot', 'Horizon 2', 'Full']);
+  assert.equal(inScope(null, null), true);
+  assert.equal(inScope(3, null), true);
+  assert.equal(inScope(1, 2), true);
+  assert.equal(inScope(2, 2), true);
+  assert.equal(inScope(3, 2), false);
+  assert.equal(inScope(null, 2), false);
 });
