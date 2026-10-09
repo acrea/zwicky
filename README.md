@@ -6,7 +6,9 @@ A browser-only tool to span a problem space, span a solution space, compose solu
 
 ## Use it
 
-Open [`dist/zwicky.html`](dist/zwicky.html) in a current browser. That one file (about 520 KB, fonts included) is the whole app. It works when opened from disk (`file://`), on GitHub Pages or on any web server, and it makes no network requests.
+**Live: <https://acrea.github.io/zwicky/>** (the latest release).
+
+Or open [`dist/zwicky.html`](dist/zwicky.html) in a current browser. That one file (about 520 KB, fonts included) is the whole app. It works when opened from disk (`file://`), on GitHub Pages or on any web server, and it makes no network requests.
 
 1. **Problem.** Write the problem statement, then lay out the problem space as dimensions (rows) × parameters (cells). Mark parameters as focus (`F`) or out of scope (`X`).
 2. **Solution.** Lay out the solution space the same way. Add options, click an option's chip, then click the parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through the box; *Compare* draws all options at once, and *Line styles* adds dash patterns for greyscale printing.
