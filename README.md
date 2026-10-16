@@ -1,22 +1,24 @@
 # zwicky.
 
-A browser-only tool to span a problem space, span a solution space, compose solution options from it, and rate those options against criteria. Named after Fritz Zwicky, the Swiss astrophysicist who formalised morphological analysis (the "Zwicky box").
+A browser-only tool to state a problem, span a morphological box (the "Zwicky box") of dimensions and parameters, mark what is already fixed or out, compose options from what is open, and rate those options against criteria. Named after Fritz Zwicky, the Swiss astrophysicist who formalised morphological analysis.
 
-**Status:** 1.0.0 (see [`VERSION`](VERSION)).
+**Status:** 2.0.0 (see [`VERSION`](VERSION)).
 
 ## Use it
 
 **Live: <https://acrea.github.io/zwicky/>** (the latest release).
 
-Or open [`dist/zwicky.html`](dist/zwicky.html) in a current browser. That one file (about 520 KB, fonts included) is the whole app. It works when opened from disk (`file://`), on GitHub Pages or on any web server, and it makes no network requests.
+Or open [`dist/zwicky.html`](dist/zwicky.html) in a current browser. That one file (about 530 KB, fonts included) is the whole app. It works when opened from disk (`file://`), on GitHub Pages or on any web server, and it makes no network requests.
 
-1. **Problem.** Write the problem statement, then lay out the problem space as dimensions (rows) × parameters (cells). Scope it in up to three stages (Horizon 1–3 by default, renamable): `1`–`3` or `F` give a parameter its stage, `X` marks it out of scope. The legend above the grid explains the tints, and *Scope up to* greys out what lies beyond a stage.
-2. **Solution.** Lay out the solution space the same way. Add options, click an option's chip, then click the parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through the box; *Compare* draws all options at once, and *Line styles* adds dash patterns for greyscale printing. In the option's inspector, set the stage of the problem it addresses.
+A workshop does not ask "is this part of the problem or of the solution?", but "is this **open**, **fixed** or **out**?". The frame of the problem lives in three places: the **problem statement** above the box (the goal), the **marks** on the box's parameters (the frame), and the **criteria** in the Evaluation tab (the yardstick).
+
+1. **Box.** Write the problem statement, then lay out the box as dimensions (rows) × parameters (cells). Mark a parameter **fixed** (`F`) when it is already decided, e.g. "Hosting: Swiss Residency": every option has it. Mark it **out** (`X`) when it is excluded. Use the parameter's note to say why, and who decided. A dimension with a single open parameter is often a constraint in disguise; the inspector suggests marking it fixed.
+2. **Options.** Add options, click an option's chip, then click the open parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through its picks and every fixed parameter; *Compare* draws all options at once, and *Line styles* adds dash patterns for greyscale printing. In the option's inspector, set its stage (Horizon 1–3 by default, renamable); *Scope up to* greys out the options of later stages.
 3. **Evaluation.** Compare the options' profiles side by side, add criteria with weights (0–10), and rate every option against every criterion. Every rating can carry a note with the rationale or assumption. zwicky computes the weighted score and the rank.
 
 Every item (dimension, parameter, option, criterion, rating) can hold a plain-text note. Select something to edit it in the inspector on the right (`I` shows or hides it). Press `?` for help, the keyboard shortcuts and the examples.
 
-**Print / PDF** prints every tab on its own landscape page, with notes as numbered footnotes, ready to drop into a slide deck.
+**Print / PDF** prints the box and the evaluation, each on its own landscape page, with notes as numbered footnotes, ready to drop into a slide deck.
 
 ### Keyboard
 
@@ -27,10 +29,8 @@ Every item (dimension, parameter, option, criterion, rating) can hold a plain-te
 | Esc | Cancel editing, leave pick mode |
 | Delete | Delete the selected item (asks first if it has a note or picks) |
 | Alt + ↑ ↓ / ← → | Move a dimension or criterion / a parameter |
-| M | Move the selected dimension between the problem and the solution space |
-| 1 – 3, 0 | Problem: set the stage of a parameter, clear it |
-| F, X | Problem: cycle the stage / mark out of scope |
-| 1 – 9 | Solution: toggle the pick of O1 – O9. Evaluation: set a score or weight |
+| F, X | Box: mark a parameter fixed / out (again: open) |
+| 1 – 9 | Box: toggle the pick of O1 – O9. Evaluation: set a score or weight |
 | Space | Pick mode: toggle the pick of the active option |
 | + / − | Evaluation: raise or lower a score or weight |
 | Ctrl/⌘ + Z, Ctrl/⌘ + Shift + Z | Undo, redo |
@@ -46,7 +46,7 @@ Spaces are stored as constrained Markdown, `*.zwicky.md`, that reads well in any
 
 ```markdown
 ---
-zwicky: 1
+zwicky: 2
 title: Car Concept (demo)
 scale: 1-5
 ---
@@ -54,21 +54,23 @@ scale: 1-5
 # Problem
 > Which new car concept should we bring to market next?
 
-## Market
-- Urban commuters {focus}
-- Luxury segment {out}
+# Box
 
-# Solution
+## Platform
+- Existing platform {fixed}
+  > Board decision: no new platform before the next model cycle.
 
 ## Drivetrain
 - Hybrid {O1}
 - Electric {O2}
+- Hydrogen {out}
+  > No refuelling network in our core markets.
 
 # Options
 
-## O1 Athletic hybrid SUV
+## O1 Athletic hybrid SUV {stage=3}
 
-## O2 City coupé
+## O2 City coupé {stage=1}
 
 # Criteria
 
@@ -81,7 +83,7 @@ scale: 1-5
   > Assumes LOHAS and WOOPIEs overlap little.
 ```
 
-[docs/FORMAT.md](docs/FORMAT.md) is the full specification; Help in the app can copy it. Hand it to an LLM to draft or edit a space, then paste the result into *File → Import from text*. zwicky reads small variations and reports what it changed; it always saves one canonical form. [examples/](examples/) has sample files.
+[docs/FORMAT.md](docs/FORMAT.md) is the full specification; Help in the app can copy it. Hand it to an LLM to draft or edit a space, then paste the result into *File → Import from text*. zwicky reads small variations and reports what it changed; it always saves one canonical form. [examples/](examples/) has sample files. Files from zwicky 1.x (format version 1, with separate problem and solution grids) are not read.
 
 ## Development
 

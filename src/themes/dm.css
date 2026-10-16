@@ -38,7 +38,7 @@
   --stage-3-bg: color-mix(in srgb, #1a8c9e 5%, transparent);
   --beyond-scope-opacity: 0.35;
   /* parameter marks: fixed (already decided) and out (excluded) */
-  --mark-fixed-bg: #e6e6e3;
+  --mark-fixed-bg: color-mix(in srgb, #111111 10%, transparent); /* translucent: paths run underneath */
   --mark-fixed-ink: #111111;
   --mark-fixed-rule: #111111;
   --mark-out-ink: #8a8a8a;
