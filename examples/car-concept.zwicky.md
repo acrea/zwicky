@@ -1,5 +1,5 @@
 ---
-zwicky: 1
+zwicky: 2
 title: Car Concept (demo)
 scale: 1-5
 ---
@@ -7,18 +7,15 @@ scale: 1-5
 # Problem
 > Which new car concept should we bring to market next?
 
-## Market
-- Urban commuters {focus}
-- Families {focus=2}
-- Long-distance travellers {focus=3}
-- Luxury segment {out}
+# Box
 
-## Constraints
-- Launch within three years {focus}
-- Reuse an existing platform
-- Budget below 500m
+## Platform
+- Existing platform {fixed}
+  > Board decision: no new platform before the next model cycle.
 
-# Solution
+## Launch
+- Within three years {fixed}
+  > Set by the product committee.
 
 ## Front design
 - aggressive
@@ -33,7 +30,8 @@ scale: 1-5
 - Petrol 200–300 hp
 - Diesel {O3}
 - Hybrid {O1}
-- Hydrogen
+- Hydrogen {out}
+  > No refuelling network in our core markets within the launch window.
 - Electric {O2}
 
 ## Seats
@@ -49,7 +47,8 @@ scale: 1-5
 - SUV {O1}
 - Estate
 - Coupé {O2}
-- Pick-up
+- Pick-up {out}
+  > Not sold in volume in our core markets.
 
 ## Character
 - proud {O1}
@@ -67,14 +66,15 @@ scale: 1-5
 - Fridge and mini kitchen {O3}
 
 ## Target group
-- HNWIs
-  > High Net Worth Individuals.
+- HNWIs {out}
+  > High Net Worth Individuals. Covered by our sister brand.
 - DINKs {O2}
   > Double Income, No Kids.
 - LOHAS {O1}
   > Lifestyle Of Health And Sustainability.
 - WOOPIEs {O1}
   > Well-Off Older People.
+- Families {O3}
 - MILKIEs
   > Modest Introverted Luxury Keepers.
 
@@ -86,7 +86,6 @@ scale: 1-5
 ## O2 City coupé {stage=1}
 
 ## O3 Family hauler {stage=2}
-> Deliberately leaves the target group open.
 
 # Criteria
 
@@ -94,7 +93,7 @@ scale: 1-5
 > How many buyers does this reach in our core markets?
 
 ## C2 Time to market {w=2}
-> Can we launch within three years on existing platforms?
+> How safely do we make the three-year launch on the existing platform?
 
 ## C3 Brand fit
 > Does it feel like us?
@@ -110,7 +109,7 @@ scale: 1-5
 ## O2 City coupé
 - C1: 3
 - C2: 4
-  > Reuses the existing EV platform (assumption, to be confirmed).
+  > Reuses the existing EV drivetrain (assumption, to be confirmed).
 - C3: 3
 
 ## O3 Family hauler

@@ -4,37 +4,36 @@
 // Shape (plain JSON, so history can snapshot it):
 //
 //   space = {
-//     meta:      { title, scale: { min, max }, stages: [name × 3], updated, extra: [[key, value], …] },
-//     problem:   { note, dims: [Dimension] },
-//     solution:  { note, dims: [Dimension] },
-//     options:   { note, items: [{ uid, id, title, note, stage, tags }] },
-//     criteria:  { note, items: [{ uid, id, title, note, weight, tags }] },
-//     ratings:   { note, cells: { O1: { C1: { score, note, tags } } } },
-//     passthrough: [line, …],          // the "# Notes" section, verbatim
+//     meta:     { title, scale: { min, max }, stages: [name × 3], updated, extra: [[key, value], …] },
+//     problem:  '',                     // the problem statement, shown above the box
+//     dims:     [Dimension],            // the box: dimensions × parameters
+//     options:  [{ uid, id, title, note, stage, tags }],
+//     criteria: [{ uid, id, title, note, weight, tags }],
+//     ratings:  { O1: { C1: { score, note, tags } } },
+//     passthrough: [line, …],           // the "# Notes" section, verbatim
 //   }
 //
-//   Dimension = { uid, kind: 'dim', title, note, tags, children: [Parameter | Dimension] }
-//   Parameter = { uid, kind: 'param', title, note, stage, mark, picks: [optionId], tags }
+//   Dimension = { uid, title, note, tags, params: [Parameter] }
+//   Parameter = { uid, title, note, mark, picks: [optionId], tags }
 //
-// Stages scope the problem in steps: stage 1 is where you start, stage 2 and 3
-// widen the scope, and each includes the ones before it. A problem parameter
-// has a stage (1–3) or the mark 'out' (out of scope), never both. An option
-// has the stage of the problem it addresses. `null` means none.
+// A parameter is open (mark null), fixed or out. A fixed parameter is already
+// decided: every option has it, which is computed (isSelected), not stored as
+// picks. An out parameter is excluded and cannot be picked. Only open
+// parameters carry picks.
 //
-// The model is a tree (§4.7): a dimension's children may in future hold
-// sub-dimensions. v1 only ever creates parameters directly under dimensions.
-// `tags` keeps unknown {…} tokens so they survive a round trip.
+// Options can name a stage (1–3, the horizon they belong to). Stage names are
+// set per space; `null` means none. `tags` keeps unknown {…} tokens so they
+// survive a round trip.
 
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2;
 export const DEFAULT_SCALE = Object.freeze({ min: 1, max: 5 });
 export const WEIGHT_MIN = 0;
 export const WEIGHT_MAX = 10;
 export const DEFAULT_WEIGHT = 1;
 export const OPTION_COLOURS = 8;
-export const MARKS = ['out'];
+export const MARKS = ['fixed', 'out'];
 export const STAGES = [1, 2, 3];
 export const DEFAULT_STAGE_NAMES = Object.freeze(['Horizon 1', 'Horizon 2', 'Horizon 3']);
-export const GRID_SECTIONS = ['problem', 'solution'];
 
 let uidCounter = 0;
 export function uid() {
@@ -61,21 +60,21 @@ export function cleanTitle(title) {
 export function createSpace(title = '') {
   return {
     meta: { title, scale: { ...DEFAULT_SCALE }, stages: [...DEFAULT_STAGE_NAMES], updated: '', extra: [] },
-    problem: { note: '', dims: [] },
-    solution: { note: '', dims: [] },
-    options: { note: '', items: [] },
-    criteria: { note: '', items: [] },
-    ratings: { note: '', cells: {} },
+    problem: '',
+    dims: [],
+    options: [],
+    criteria: [],
+    ratings: {},
     passthrough: [],
   };
 }
 
 export function createDimension(title = '', note = '') {
-  return { uid: uid(), kind: 'dim', title, note, tags: [], children: [] };
+  return { uid: uid(), title, note, tags: [], params: [] };
 }
 
 export function createParameter(title = '', note = '') {
-  return { uid: uid(), kind: 'param', title, note, stage: null, mark: null, picks: [], tags: [] };
+  return { uid: uid(), title, note, mark: null, picks: [], tags: [] };
 }
 
 export function createOption(id, title = '', note = '') {
@@ -125,55 +124,49 @@ export function coordinate(rowIndex, cellIndex) {
 
 // ---------------------------------------------------------------- lookup
 
-export function parametersOf(dim) {
-  return dim.children.filter((c) => c.kind === 'param');
-}
-
-/** Walks every node in a grid section, depth first. */
-export function* walk(nodes, parent = null) {
-  for (const node of nodes) {
-    yield { node, parent };
-    if (node.kind === 'dim') yield* walk(node.children, node);
-  }
-}
-
-/** Finds a dimension or parameter by uid in either grid section. */
+/**
+ * Finds a dimension or parameter by uid. Returns
+ * { node, kind: 'dim' | 'param', dim, row, index, siblings }, where `dim` is the
+ * dimension itself or the parameter's dimension, `row` its index, and `index`
+ * the node's index among `siblings`. Null if there is no such node.
+ */
 export function findNode(space, nodeUid) {
-  for (const section of GRID_SECTIONS) {
-    const top = space[section].dims;
-    for (const { node, parent } of walk(top)) {
-      if (node.uid === nodeUid) {
-        const siblings = parent ? parent.children : top;
-        return { node, parent, section, siblings, index: siblings.indexOf(node) };
-      }
-    }
+  for (let row = 0; row < space.dims.length; row++) {
+    const dim = space.dims[row];
+    if (dim.uid === nodeUid) return { node: dim, kind: 'dim', dim, row, index: row, siblings: space.dims };
+    const index = dim.params.findIndex((p) => p.uid === nodeUid);
+    if (index >= 0) return { node: dim.params[index], kind: 'param', dim, row, index, siblings: dim.params };
   }
   return null;
 }
 
 export function findOption(space, id) {
-  return space.options.items.find((o) => o.id === id) || null;
+  return space.options.find((o) => o.id === id) || null;
 }
 
 export function findCriterion(space, id) {
-  return space.criteria.items.find((c) => c.id === id) || null;
+  return space.criteria.find((c) => c.id === id) || null;
 }
 
-// ---------------------------------------------------------------- grid edits
+/** Every parameter of the box, in grid order. */
+export function allParameters(space) {
+  return space.dims.flatMap((d) => d.params);
+}
 
-export function addDimension(space, section, index = Infinity, title = '') {
-  const dims = space[section].dims;
+// ---------------------------------------------------------------- box edits
+
+export function addDimension(space, index = Infinity, title = '') {
   const dim = createDimension(title);
-  dims.splice(Math.min(index, dims.length), 0, dim);
+  space.dims.splice(Math.min(index, space.dims.length), 0, dim);
   return dim;
 }
 
 export function addParameter(space, dimUid, index = Infinity, title = '') {
   const found = findNode(space, dimUid);
-  if (!found || found.node.kind !== 'dim') return null;
+  if (!found || found.kind !== 'dim') return null;
   const param = createParameter(title);
-  const children = found.node.children;
-  children.splice(Math.min(index, children.length), 0, param);
+  const params = found.node.params;
+  params.splice(Math.min(index, params.length), 0, param);
   return param;
 }
 
@@ -185,87 +178,84 @@ export function removeNode(space, nodeUid) {
   return found.node;
 }
 
-/** Moves a node among its siblings to `toIndex` (index after removal). */
+/** Moves a dimension or parameter among its siblings to `toIndex` (index after removal). */
 export function moveNode(space, nodeUid, toIndex) {
   const found = findNode(space, nodeUid);
   if (!found) return false;
-  const { siblings, index, node } = found;
-  const target = Math.max(0, Math.min(toIndex, siblings.length - 1));
-  if (target === index) return false;
-  siblings.splice(index, 1);
-  siblings.splice(target, 0, node);
-  return true;
+  return moveItem(found.siblings, found.index, toIndex);
 }
 
-/** Moves a parameter into a (possibly different) dimension of the same section. */
+/** Moves a parameter into a (possibly different) dimension at `toIndex`. */
 export function moveParameter(space, paramUid, toDimUid, toIndex) {
   const from = findNode(space, paramUid);
   const to = findNode(space, toDimUid);
-  if (!from || !to || from.node.kind !== 'param' || to.node.kind !== 'dim') return false;
-  if (from.section !== to.section) return false;
+  if (!from || !to || from.kind !== 'param' || to.kind !== 'dim') return false;
   from.siblings.splice(from.index, 1);
-  const children = to.node.children;
-  children.splice(Math.max(0, Math.min(toIndex, children.length)), 0, from.node);
+  const params = to.node.params;
+  params.splice(Math.max(0, Math.min(toIndex, params.length)), 0, from.node);
   return true;
 }
 
-/**
- * What moving a dimension to the other grid section would drop: problem stages
- * and marks going to the solution, option picks going to the problem.
- */
-export function moveLosses(dim) {
-  let marks = 0;
-  let picks = 0;
-  for (const { node } of walk(dim.children)) {
-    if (node.kind !== 'param') continue;
-    if (node.mark || node.stage) marks += 1;
-    picks += node.picks.length;
-  }
-  return { marks, picks };
+/** Deleting asks for a confirm only if the node (or a parameter) has a note or a pick. */
+export function nodeHasContent(node) {
+  if (node.note) return true;
+  if (node.params) return node.params.some(nodeHasContent);
+  return node.picks.length > 0;
 }
 
-/**
- * Moves a top-level dimension, with its parameters and notes, to the end of the
- * other grid section. Marks are dropped going to the solution, picks going to
- * the problem. Returns the dimension, or null if nothing moved.
- */
-export function moveDimensionToSection(space, dimUid, toSection) {
-  const found = findNode(space, dimUid);
-  if (!found || found.node.kind !== 'dim' || found.parent) return null;
-  if (!GRID_SECTIONS.includes(toSection) || found.section === toSection) return null;
-  const dim = found.node;
-  found.siblings.splice(found.index, 1);
-  for (const { node } of walk(dim.children)) {
-    if (node.kind !== 'param') continue;
-    if (toSection === 'solution') {
-      node.mark = null;
-      node.stage = null;
-    } else node.picks = [];
-  }
-  space[toSection].dims.push(dim);
-  return dim;
-}
+// ---------------------------------------------------------------- marks and picks
 
-/** Sets a problem mark ('out'); setting it again clears it. A mark clears the stage. */
+/**
+ * Sets a parameter's mark ('fixed' or 'out'); setting the current mark again
+ * opens the parameter. A marked parameter carries no picks: fixed already
+ * counts for every option, out cannot be picked. Returns the dropped picks.
+ */
 export function toggleMark(param, mark) {
-  if (!MARKS.includes(mark)) return;
+  if (!MARKS.includes(mark)) return [];
   param.mark = param.mark === mark ? null : mark;
-  if (param.mark) param.stage = null;
+  const dropped = param.mark ? param.picks : [];
+  if (param.mark) param.picks = [];
+  return dropped;
+}
+
+/** Whether option `optionId` has the parameter: picked, or fixed for all. */
+export function isSelected(param, optionId) {
+  if (param.mark === 'fixed') return true;
+  return param.mark === null && param.picks.includes(optionId);
+}
+
+/** Toggles a pick on an open parameter. Returns false if the parameter is marked. */
+export function togglePick(param, optionId) {
+  if (param.mark) return false;
+  const i = param.picks.indexOf(optionId);
+  if (i >= 0) param.picks.splice(i, 1);
+  else {
+    param.picks.push(optionId);
+    param.picks.sort((a, b) => a - b);
+  }
+  return true;
+}
+
+/** Selected parameters per dimension, in grid order (fixed ones included). */
+export function optionProfile(space, optionId) {
+  return space.dims.map((dim) => ({ dim, params: dim.params.filter((p) => isSelected(p, optionId)) }));
+}
+
+/**
+ * A dimension with exactly one open parameter is often a constraint in
+ * disguise: the value is already decided and could be marked fixed.
+ */
+export function looksDecided(dim) {
+  return dim.params.length === 1 && dim.params[0].mark === null;
 }
 
 // ---------------------------------------------------------------- stages
 
 export const isStage = (n) => STAGES.includes(n);
 
-/** Sets the stage of a problem parameter or an option (null clears it). A stage clears the 'out' mark. */
-export function setStage(item, stage) {
-  item.stage = isStage(stage) ? stage : null;
-  if (item.stage && 'mark' in item) item.mark = null;
-}
-
-/** Cycles a stage: none → 1 → 2 → 3 → none. */
-export function cycleStage(item) {
-  setStage(item, item.stage === STAGES.length ? null : (item.stage || 0) + 1);
+/** Sets the stage of an option (null clears it). */
+export function setStage(option, stage) {
+  option.stage = isStage(stage) ? stage : null;
 }
 
 /** The display name of stage 1–3 in this space. */
@@ -282,80 +272,42 @@ export function cleanStageName(name) {
     .trim();
 }
 
-/** Whether an item with `stage` lies within a "scope up to stage `upTo`" filter (null = no filter). */
+/** Whether an option with `stage` lies within a "scope up to stage `upTo`" filter (null = no filter). */
 export function inScope(stage, upTo) {
   return !upTo || (isStage(stage) && stage <= upTo);
-}
-
-/** Deleting asks for a confirm only if the node (or a child) has a note or a pick (§3.1). */
-export function nodeHasContent(node) {
-  if (node.note) return true;
-  if (node.kind === 'param') return node.picks.length > 0;
-  return node.children.some(nodeHasContent);
-}
-
-// ---------------------------------------------------------------- picks
-
-export function isPicked(param, optionId) {
-  return param.picks.includes(optionId);
-}
-
-export function togglePick(param, optionId) {
-  const i = param.picks.indexOf(optionId);
-  if (i >= 0) param.picks.splice(i, 1);
-  else {
-    param.picks.push(optionId);
-    param.picks.sort((a, b) => a - b);
-  }
-}
-
-/** Picked parameters per solution dimension, in grid order. */
-export function optionProfile(space, optionId) {
-  return space.solution.dims.map((dim) => ({
-    dim,
-    params: parametersOf(dim).filter((p) => p.picks.includes(optionId)),
-  }));
 }
 
 // ---------------------------------------------------------------- options
 
 export function addOption(space, title = '', index = Infinity) {
-  const items = space.options.items;
+  const items = space.options;
   const option = createOption(nextId(items), title);
   items.splice(Math.min(index, items.length), 0, option);
   return option;
 }
 
-/** Copies an option's title, note, picks and ratings into a new option right after it. */
+/** Copies an option's title, note, stage, picks and ratings into a new option right after it. */
 export function duplicateOption(space, id) {
-  const items = space.options.items;
+  const items = space.options;
   const source = findOption(space, id);
   if (!source) return null;
   const copy = createOption(nextId(items), source.title, source.note);
   copy.stage = source.stage;
   copy.tags = [...source.tags];
   items.splice(items.indexOf(source) + 1, 0, copy);
-  for (const { node } of walk(space.solution.dims)) {
-    if (node.kind === 'param' && node.picks.includes(id)) togglePick(node, copy.id);
-  }
-  const cells = space.ratings.cells[optionKey(id)];
-  if (cells) space.ratings.cells[optionKey(copy.id)] = JSON.parse(JSON.stringify(cells));
+  for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, copy.id);
+  const cells = space.ratings[optionKey(id)];
+  if (cells) space.ratings[optionKey(copy.id)] = JSON.parse(JSON.stringify(cells));
   return copy;
 }
 
 /** Deletes an option with its picks and ratings. */
 export function removeOption(space, id) {
-  const items = space.options.items;
-  const i = items.findIndex((o) => o.id === id);
+  const i = space.options.findIndex((o) => o.id === id);
   if (i < 0) return false;
-  items.splice(i, 1);
-  for (const { node } of walk(space.solution.dims)) {
-    if (node.kind === 'param') node.picks = node.picks.filter((p) => p !== id);
-  }
-  for (const { node } of walk(space.problem.dims)) {
-    if (node.kind === 'param') node.picks = node.picks.filter((p) => p !== id);
-  }
-  delete space.ratings.cells[optionKey(id)];
+  space.options.splice(i, 1);
+  for (const p of allParameters(space)) p.picks = p.picks.filter((x) => x !== id);
+  delete space.ratings[optionKey(id)];
   return true;
 }
 
@@ -371,21 +323,20 @@ export function moveItem(items, from, to) {
 // ---------------------------------------------------------------- criteria
 
 export function addCriterion(space, title = '', index = Infinity) {
-  const items = space.criteria.items;
+  const items = space.criteria;
   const criterion = createCriterion(nextId(items), title);
   items.splice(Math.min(index, items.length), 0, criterion);
   return criterion;
 }
 
 export function removeCriterion(space, id) {
-  const items = space.criteria.items;
-  const i = items.findIndex((c) => c.id === id);
+  const i = space.criteria.findIndex((c) => c.id === id);
   if (i < 0) return false;
-  items.splice(i, 1);
+  space.criteria.splice(i, 1);
   const key = criterionKey(id);
-  for (const ok of Object.keys(space.ratings.cells)) {
-    delete space.ratings.cells[ok][key];
-    if (Object.keys(space.ratings.cells[ok]).length === 0) delete space.ratings.cells[ok];
+  for (const ok of Object.keys(space.ratings)) {
+    delete space.ratings[ok][key];
+    if (Object.keys(space.ratings[ok]).length === 0) delete space.ratings[ok];
   }
   return true;
 }
@@ -404,7 +355,7 @@ export function clampScore(score, scale) {
 }
 
 export function getRating(space, optionId, criterionId) {
-  const row = space.ratings.cells[optionKey(optionId)];
+  const row = space.ratings[optionKey(optionId)];
   return (row && row[criterionKey(criterionId)]) || null;
 }
 
@@ -415,7 +366,7 @@ export function getRating(space, optionId, criterionId) {
 export function setRating(space, optionId, criterionId, patch) {
   const ok = optionKey(optionId);
   const ck = criterionKey(criterionId);
-  const cells = space.ratings.cells;
+  const cells = space.ratings;
   const current = (cells[ok] && cells[ok][ck]) || { score: null, note: '', tags: [] };
   const next = { ...current, ...patch };
   if ('score' in patch) next.score = clampScore(patch.score, space.meta.scale);
@@ -433,7 +384,7 @@ export function setRating(space, optionId, criterionId, patch) {
 
 /** Clamps every stored score to the current scale (after the scale changed). */
 export function clampAllScores(space) {
-  for (const row of Object.values(space.ratings.cells)) {
+  for (const row of Object.values(space.ratings)) {
     for (const cell of Object.values(row)) cell.score = clampScore(cell.score, space.meta.scale);
   }
 }
@@ -451,7 +402,7 @@ export function scoreOption(space, optionId) {
   let sumWeighted = 0;
   let sumWeights = 0;
   let unrated = 0;
-  for (const c of space.criteria.items) {
+  for (const c of space.criteria) {
     const r = getRating(space, optionId, c.id);
     const s = r ? r.score : null;
     if (s === null) {
@@ -474,7 +425,7 @@ export function scoreOption(space, optionId) {
  */
 export function rankOptions(space) {
   const results = new Map();
-  for (const o of space.options.items) {
+  for (const o of space.options) {
     const { score, unrated } = scoreOption(space, o.id);
     results.set(o.id, { score, display: score === null ? null : round1(score), unrated, rank: null });
   }
