@@ -59,11 +59,6 @@
   font-size: var(--fs-band);
   line-height: var(--lh-tight);
 }
-.note-band.intro .print-note {
-  font-size: var(--fs-md);
-  color: var(--ink-muted);
-  font-style: italic;
-}
 .print-root .grid-canvas {
   padding: 0;
   min-width: 0;

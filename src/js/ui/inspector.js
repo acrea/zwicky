@@ -6,8 +6,7 @@ import {
   findNode,
   findOption,
   optionProfile,
-  togglePick,
-  toggleMark,
+  looksDecided,
   setStage,
   stageName,
   cleanStageName,
@@ -15,13 +14,13 @@ import {
   DEFAULT_STAGE_NAMES,
   coordinate,
   rowLetter,
-  parametersOf,
   duplicateOption,
   removeOption,
   clampAllScores,
   cleanTitle,
 } from '../model.js';
 import { swatch } from './options-bar.js';
+import { MARK_INFO } from './grid.js';
 import { SHORTCUTS } from './shortcuts.js';
 
 /**
@@ -99,11 +98,11 @@ export function inspected(app) {
     const r = app.evaluationInspected(app);
     if (r) return r;
   }
-  if (tab === 'problem' || tab === 'solution') {
-    const cur = state.cursor[tab];
+  if (tab === 'box') {
+    const cur = state.cursor.box;
     if (cur && (cur.type === 'dim' || cur.type === 'param')) {
       const found = findNode(space, cur.uid);
-      if (found) return { kind: cur.type, found, section: tab };
+      if (found) return { kind: cur.type, found };
     }
   }
   return { kind: 'document' };
@@ -126,42 +125,70 @@ export function renderInspector(app) {
   return body;
 }
 
-function nodeInspector(app, { kind, found, section }) {
+const NOTE_PLACEHOLDERS = {
+  fixed: 'Why is it fixed, and who decided?',
+  out: 'Why is it out?',
+};
+
+/** A dimension with a single open parameter may be a constraint in disguise. */
+function decidedHint(app, param) {
+  return h(
+    'p',
+    { class: 'insp-hint' },
+    'Already decided? ',
+    h('button', { class: 'link', onclick: () => app.markParameter(param, 'fixed') }, 'Mark it as fixed'),
+    '. ',
+    h('kbd', null, 'F'),
+  );
+}
+
+function nodeInspector(app, { kind, found }) {
   const { space } = app;
-  const { node, parent } = found;
-  const dims = space[section].dims;
+  const { node, dim, row } = found;
   const out = [];
   if (kind === 'dim') {
-    const r = dims.indexOf(node);
-    out.push(head('Dimension', `${section === 'problem' ? 'Problem' : 'Solution'} · row ${rowLetter(r)}`));
+    out.push(head('Dimension', `row ${rowLetter(row)}`));
     out.push(titleField(app, node), noteField(app, node));
-    out.push(h('p', { class: 'insp-meta' }, `${parametersOf(node).length} parameters`));
+    const fixed = node.params.filter((p) => p.mark === 'fixed').length;
+    const excluded = node.params.filter((p) => p.mark === 'out').length;
+    const counts = [`${node.params.length} parameter${node.params.length === 1 ? '' : 's'}`, fixed && `${fixed} fixed`, excluded && `${excluded} out`];
+    out.push(h('p', { class: 'insp-meta' }, counts.filter(Boolean).join(' · ')));
+    if (looksDecided(node)) out.push(decidedHint(app, node.params[0]));
   } else {
-    const r = dims.indexOf(parent);
-    const ref = coordinate(r, parametersOf(parent).indexOf(node));
-    out.push(head('Parameter', `${ref} · ${parent.title || 'Untitled dimension'}`));
-    out.push(titleField(app, node), noteField(app, node));
-    if (section === 'problem') {
-      const outButton = h(
+    const ref = coordinate(row, found.index);
+    out.push(head('Parameter', `${ref} · ${dim.title || 'Untitled dimension'}`));
+    out.push(titleField(app, node), noteField(app, node, 'Note', NOTE_PLACEHOLDERS[node.mark]));
+    const markButton = (mark, key) =>
+      h(
         'button',
         {
-          class: ['toggle', 'mark-toggle', 'mark-out'],
-          'aria-pressed': node.mark === 'out' ? 'true' : 'false',
-          onclick: () => app.change(() => toggleMark(node, 'out')),
+          class: ['toggle', 'mark-toggle', 'mark-' + mark],
+          'aria-pressed': node.mark === mark ? 'true' : 'false',
+          title: `${MARK_INFO[mark].label}: ${MARK_INFO[mark].help}`,
+          onclick: () => app.markParameter(node, mark),
         },
-        'Out of scope',
-        h('kbd', null, 'X'),
+        MARK_INFO[mark].label,
+        h('kbd', null, key),
       );
-      out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, node, true), outButton)));
-    } else {
+    out.push(
+      h(
+        'div',
+        { class: 'field' },
+        h('span', { class: 'field-label' }, 'Frame'),
+        h('div', { class: 'segmented mark-choice' }, markButton('fixed', 'F'), markButton('out', 'X')),
+        h('p', { class: 'insp-meta' }, node.mark ? `${MARK_INFO[node.mark].label}: ${MARK_INFO[node.mark].help}.` : 'Open: options can pick it.'),
+      ),
+    );
+    if (looksDecided(dim)) out.push(decidedHint(app, node));
+    if (!node.mark) {
       const list = h('div', { class: 'pick-list' });
-      for (const o of space.options.items) {
+      for (const o of space.options) {
         const id = 'pick-' + o.id;
         list.append(
           h(
             'label',
             { class: 'pick-row', for: id },
-            h('input', { type: 'checkbox', id, checked: node.picks.includes(o.id), onchange: () => app.change(() => togglePick(node, o.id)) }),
+            h('input', { type: 'checkbox', id, checked: node.picks.includes(o.id), onchange: () => app.pick(node, o.id) }),
             swatch(o.id, app.state.lineStyles),
             h('span', { class: 'id' }, 'O' + o.id),
             h('span', { class: ['pick-title', !o.title && 'empty'] }, o.title || 'Untitled'),
@@ -169,7 +196,7 @@ function nodeInspector(app, { kind, found, section }) {
           ),
         );
       }
-      if (!space.options.items.length) list.append(h('p', { class: 'insp-meta' }, 'No options yet. Add one with “+ Option”.'));
+      if (!space.options.length) list.append(h('p', { class: 'insp-meta' }, 'No options yet. Add one with “+ Option”.'));
       out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Picked by'), list));
     }
   }
@@ -177,32 +204,23 @@ function nodeInspector(app, { kind, found, section }) {
     h(
       'div',
       { class: 'insp-actions' },
-      kind === 'dim'
-        ? h(
-            'button',
-            { class: 'btn', title: 'Move this dimension and its parameters to the other space', onclick: () => app.moveCursorDimension(section) },
-            section === 'problem' ? 'Move to Solution' : 'Move to Problem',
-            h('kbd', null, 'M'),
-          )
-        : null,
-      h('button', { class: 'btn danger-quiet', onclick: () => app.deleteCursor(section) }, kind === 'dim' ? 'Delete dimension' : 'Delete parameter'),
+      h('button', { class: 'btn danger-quiet', onclick: () => app.deleteCursor() }, kind === 'dim' ? 'Delete dimension' : 'Delete parameter'),
     ),
   );
   return out;
 }
 
 /** One toggle per stage; pressing the current stage clears it. */
-function stageButtons(app, item, withKeys) {
+function stageButtons(app, option) {
   return STAGES.map((n) =>
     h(
       'button',
       {
         class: ['toggle', 'stage-toggle', 'stage-' + n],
-        'aria-pressed': item.stage === n ? 'true' : 'false',
-        onclick: () => app.change(() => setStage(item, item.stage === n ? null : n)),
+        'aria-pressed': option.stage === n ? 'true' : 'false',
+        onclick: () => app.change(() => setStage(option, option.stage === n ? null : n)),
       },
       stageName(app.space, n),
-      withKeys ? h('kbd', null, String(n)) : null,
     ),
   );
 }
@@ -211,7 +229,7 @@ function optionInspector(app, option) {
   const { space, state } = app;
   const out = [head('Option', null, h('span', { class: 'insp-ref option-ref' }, swatch(option.id, state.lineStyles), 'O' + option.id))];
   out.push(titleField(app, option), noteField(app, option, 'Note', 'What is the idea behind this option?'));
-  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Addresses stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, option, false))));
+  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, option))));
   const active = state.activeOption === option.id;
   out.push(
     h(
@@ -227,12 +245,13 @@ function optionInspector(app, option) {
 
   const profile = h('dl', { class: 'profile' });
   for (const { dim, params } of optionProfile(space, option.id)) {
+    const items = params.map((p) => h('span', { class: p.mark === 'fixed' && 'fixed' }, p.title || 'Untitled'));
     profile.append(
       h('dt', null, dim.title || 'Untitled dimension'),
-      h('dd', { class: !params.length && 'none' }, params.length ? params.map((p) => p.title || 'Untitled').join(' · ') : '—'),
+      h('dd', { class: !params.length && 'none' }, params.length ? items.flatMap((el, i) => (i ? [' · ', el] : [el])) : '—'),
     );
   }
-  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Profile'), space.solution.dims.length ? profile : h('p', { class: 'insp-meta' }, 'The solution space is empty.')));
+  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Profile'), space.dims.length ? profile : h('p', { class: 'insp-meta' }, 'The box is empty.')));
 
   out.push(
     h(
@@ -334,7 +353,7 @@ function documentInspector(app) {
   }
   out.push(h('p', { class: 'insp-meta' }, 'Your work is kept in this browser’s cache. That is a convenience, not a backup: save to a file (File → Save).'));
   const keys = h('dl', { class: 'shortcuts' });
-  for (const [k, d] of SHORTCUTS.slice(0, 14)) keys.append(h('dt', null, k), h('dd', null, d));
+  for (const [k, d] of SHORTCUTS.slice(0, 12)) keys.append(h('dt', null, k), h('dd', null, d));
   out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Keyboard'), keys, h('button', { class: 'link', onclick: () => app.help() }, 'All shortcuts …')));
   return out;
 }

@@ -1,36 +1,19 @@
-// Shared grid for the Problem and Solution tabs (§3.1): the morphological box.
-// Rows are dimensions (sticky title column), cells are parameters, a ghost "+"
-// cell ends every row and a ghost "+ Dimension" row ends the grid.
+// The Box tab's grid: the morphological box. Rows are dimensions (sticky title
+// column), cells are parameters, a ghost "+" cell ends every row and a ghost
+// "+ Dimension" row ends the grid. Parameters are open, fixed or out.
 
-import { h, s, isMac } from './dom.js';
-import {
-  parametersOf,
-  findNode,
-  removeNode,
-  moveNode,
-  moveDimensionToSection,
-  moveLosses,
-  moveParameter,
-  nodeHasContent,
-  toggleMark,
-  togglePick,
-  setStage,
-  cycleStage,
-  stageName,
-  inScope,
-  findOption,
-  optionColour,
-  coordinate,
-  rowLetter,
-} from '../model.js';
+import { h, s } from './dom.js';
+import { findNode, removeNode, moveNode, moveParameter, nodeHasContent, inScope, findOption, optionColour, coordinate, rowLetter } from '../model.js';
+
+const SECTION = 'box';
 
 // ---------------------------------------------------------------- cursor
 
 /** The navigable cells, row by row: dimension, parameters, ghost; then the ghost dimension row. */
-export function gridLayout(space, section) {
-  const rows = space[section].dims.map((d) => [
+export function gridLayout(space) {
+  const rows = space.dims.map((d) => [
     { type: 'dim', uid: d.uid },
-    ...parametersOf(d).map((p) => ({ type: 'param', uid: p.uid })),
+    ...d.params.map((p) => ({ type: 'param', uid: p.uid })),
     { type: 'ghost', uid: d.uid },
   ]);
   rows.push([{ type: 'ghostdim', uid: '' }]);
@@ -49,8 +32,8 @@ function findPos(rows, sel) {
 }
 
 /** Keeps the cursor valid after a change: same item, else the same position. */
-export function fixCursor(space, section, sel, fallbackPos) {
-  const rows = gridLayout(space, section);
+export function fixCursor(space, sel, fallbackPos) {
+  const rows = gridLayout(space);
   if (sel && findPos(rows, sel)) return sel;
   const [r0, c0] = fallbackPos || [0, 0];
   const r = Math.max(0, Math.min(r0, rows.length - 1));
@@ -73,20 +56,23 @@ export function optionVars(id) {
   return { '--opt': `var(--option-${colour})`, '--on-opt': `var(--on-option-${colour})` };
 }
 
+/** The glyph and wording of a parameter's mark, for cells, legend and inspector. */
+export const MARK_INFO = {
+  fixed: { glyph: '◆', label: 'Fixed', help: 'already decided: every option has it' },
+  out: { glyph: '', label: 'Out', help: 'excluded: no option can pick it' },
+};
+
 /**
- * Renders a grid section. Returns { el, focusEl } where focusEl is the inline
- * editor (if editing) or the cursor cell.
+ * Renders the box. Returns { el, focusEl } where focusEl is the inline editor
+ * (if editing) or the cursor cell.
  */
-export function renderGrid(app, section) {
+export function renderGrid(app) {
   const { space, state } = app;
-  const dims = space[section].dims;
-  const cursor = state.cursor[section];
+  const cursor = state.cursor[SECTION];
   const cursorKey = selKey(cursor);
-  const editing = state.editing && state.editing.section === section ? state.editing : null;
+  const editing = state.editing && state.editing.section === SECTION ? state.editing : null;
   const editKey = editing ? selKey(editing.sel) : '';
-  const solution = section === 'solution';
-  const active = solution ? state.activeOption : null;
-  const options = space.options.items;
+  const active = state.activeOption;
   let focusEl = null;
 
   let firstStop = !cursorKey; // with no cursor, the first cell is the grid's tab stop
@@ -124,12 +110,12 @@ export function renderGrid(app, section) {
   const noteFold = (note) => (note ? h('span', { class: 'fold', 'aria-hidden': 'true' }) : null);
 
   const grid = h('div', {
-    class: ['grid', state.pickMode && solution && active !== null && 'pick-mode'],
+    class: ['grid', state.pickMode && active !== null && 'pick-mode'],
     role: 'grid',
-    'aria-label': solution ? 'Solution space' : 'Problem space',
+    'aria-label': 'Box',
   });
 
-  dims.forEach((dim, r) => {
+  space.dims.forEach((dim, r) => {
     const row = h('div', { class: 'row', role: 'row', dataset: { dim: dim.uid } });
     const dimSel = { type: 'dim', uid: dim.uid };
     row.append(
@@ -144,22 +130,17 @@ export function renderGrid(app, section) {
         titleEl(dimSel, dim.title, 'Untitled dimension'),
       ),
     );
-    parametersOf(dim).forEach((p, c) => {
+    dim.params.forEach((p, c) => {
       const sel = { type: 'param', uid: p.uid };
-      const cls = ['param', p.note && 'has-note'];
+      const cls = ['param', p.note && 'has-note', p.mark && 'mark-' + p.mark];
       let style = null;
       const markers = [];
-      if (section === 'problem') {
-        if (p.stage) cls.push('stage-' + p.stage);
-        else if (p.mark) cls.push('mark-' + p.mark);
-        if (!inScope(p.stage, state.scopeUpTo)) cls.push('beyond-scope');
-      }
-      if (solution) {
+      if (!p.mark) {
         if (active !== null && p.picks.includes(active)) {
           cls.push('picked');
           style = optionVars(active);
         }
-        for (const o of options) {
+        for (const o of space.options) {
           if (o.id === active || !p.picks.includes(o.id) || !inScope(o.stage, state.scopeUpTo)) continue;
           const { style: ls } = optionColour(o.id);
           markers.push(
@@ -174,19 +155,20 @@ export function renderGrid(app, section) {
       const coord = coordinate(r, c);
       const label = [
         `${coord}: ${p.title}`,
-        section === 'problem' && p.stage && stageName(space, p.stage),
-        section === 'problem' && p.mark === 'out' && 'out of scope',
-        solution && p.picks.length && 'picked by ' + p.picks.map((id) => 'O' + id).join(', '),
+        p.mark && `${MARK_INFO[p.mark].label.toLowerCase()}, ${MARK_INFO[p.mark].help}`,
+        p.picks.length && 'picked by ' + p.picks.map((id) => 'O' + id).join(', '),
         p.note && 'has note',
       ]
         .filter(Boolean)
         .join(', ');
+      const glyph = p.mark && MARK_INFO[p.mark].glyph;
       row.append(
         h(
           'div',
           { ...cellAttrs(sel, cls, label), style, draggable: selKey(sel) === editKey ? null : 'true' },
           h('span', { class: 'coord' }, coord),
           noteFold(p.note),
+          glyph ? h('span', { class: 'mark-glyph', 'aria-hidden': 'true' }, glyph) : null,
           titleEl(sel, p.title, 'Untitled'),
           markers.length ? h('div', { class: 'markers' }, markers) : null,
         ),
@@ -208,10 +190,10 @@ export function renderGrid(app, section) {
     ),
   );
 
-  const canvas = h('div', { class: 'grid-canvas cursor-root', dataset: { section } });
-  if (solution) canvas.append(s('svg', { class: 'paths', 'aria-hidden': 'true' }));
+  const canvas = h('div', { class: 'grid-canvas cursor-root', dataset: { section: SECTION } });
+  canvas.append(s('svg', { class: 'paths', 'aria-hidden': 'true' }));
   canvas.append(grid);
-  wireGrid(app, section, canvas);
+  wireGrid(app, canvas);
 
   if (!focusEl && cursorKey) focusEl = grid.querySelector(`[data-key="${CSS.escape(cursorKey)}"]`);
   return { el: canvas, focusEl };
@@ -223,7 +205,8 @@ const selFromCell = (cell) => ({ type: cell.dataset.type, uid: cell.dataset.uid 
 
 let drag = null; // { type: 'dim' | 'param', uid }
 
-function wireGrid(app, section, canvas) {
+function wireGrid(app, canvas) {
+  const section = SECTION;
   canvas.addEventListener('click', (e) => {
     const cell = e.target.closest('.cell');
     if (!cell || e.target.closest('.inline-edit')) return;
@@ -234,10 +217,10 @@ function wireGrid(app, section, canvas) {
       app.startEdit(section, sel);
       return;
     }
-    if (section === 'solution' && state.pickMode && state.activeOption !== null && sel.type === 'param') {
+    if (state.pickMode && state.activeOption !== null && sel.type === 'param') {
       const found = findNode(app.space, sel.uid);
       app.setCursor(section, sel, { render: false });
-      app.change(() => togglePick(found.node, state.activeOption));
+      app.pick(found.node, state.activeOption);
       return;
     }
     app.setCursor(section, sel);
@@ -357,7 +340,7 @@ function wireGrid(app, section, canvas) {
     e.preventDefault();
     const space = app.space;
     if (d.type === 'dim') {
-      const dims = space[section].dims;
+      const dims = space.dims;
       const from = dims.findIndex((x) => x.uid === d.uid);
       let to = t.dimUid === null ? dims.length : dims.findIndex((x) => x.uid === t.dimUid) + (t.before ? 0 : 1);
       if (from < to) to -= 1;
@@ -366,9 +349,9 @@ function wireGrid(app, section, canvas) {
     }
     const target = findNode(space, t.dimUid).node;
     const from = findNode(space, d.uid);
-    let to = t.paramUid === null ? target.children.length : target.children.findIndex((x) => x.uid === t.paramUid) + (t.before ? 0 : 1);
-    if (from.parent === target && from.index < to) to -= 1;
-    if (from.parent === target && from.index === to) return;
+    let to = t.paramUid === null ? target.params.length : target.params.findIndex((x) => x.uid === t.paramUid) + (t.before ? 0 : 1);
+    if (from.dim === target && from.index < to) to -= 1;
+    if (from.dim === target && from.index === to) return;
     app.change(() => moveParameter(space, d.uid, t.dimUid, to));
     app.setCursor(section, { type: 'param', uid: d.uid });
   });
@@ -382,11 +365,12 @@ function wireGrid(app, section, canvas) {
 
 export const NAV_KEYS = ['ArrowRight', 'ArrowLeft', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'Tab'];
 
-/** Handles a key for the grid of `section`. Returns true if handled. */
-export function gridKeydown(app, section, e) {
+/** Handles a key for the box. Returns true if handled. */
+export function gridKeydown(app, e) {
+  const section = SECTION;
   const { state } = app;
   const space = app.space;
-  const rows = gridLayout(space, section);
+  const rows = gridLayout(space);
   const cursor = state.cursor[section];
   const pos = findPos(rows, cursor) || [0, 0];
   const [r, c] = pos;
@@ -413,11 +397,8 @@ export function gridKeydown(app, section, e) {
     const found = findNode(space, sel.uid);
     if (!found) return true;
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
-      const dimUid = sel.type === 'param' ? found.parent.uid : found.node.uid;
-      const dims = space[section].dims;
-      const i = dims.findIndex((d) => d.uid === dimUid);
-      const j = i + (e.key === 'ArrowUp' ? -1 : 1);
-      if (j >= 0 && j < dims.length) app.change(() => moveNode(space, dimUid, j));
+      const j = found.row + (e.key === 'ArrowUp' ? -1 : 1);
+      if (j >= 0 && j < space.dims.length) app.change(() => moveNode(space, found.dim.uid, j));
     } else if (sel.type === 'param') {
       const j = found.index + (e.key === 'ArrowLeft' ? -1 : 1);
       if (j >= 0 && j < found.siblings.length) app.change(() => moveNode(space, sel.uid, j));
@@ -427,7 +408,7 @@ export function gridKeydown(app, section, e) {
   if (e.altKey) return false;
 
   // a printable key on a selected ghost cell starts creating the new item
-  if (cursor && (sel.type === 'ghost' || sel.type === 'ghostdim') && e.key.length === 1 && e.key !== ' ') {
+  if ((sel.type === 'ghost' || sel.type === 'ghostdim') && e.key.length === 1 && e.key !== ' ') {
     e.preventDefault();
     app.startEdit(section, sel, e.key);
     return true;
@@ -465,45 +446,31 @@ export function gridKeydown(app, section, e) {
       return true;
     case 'Delete':
     case 'Backspace':
-      deleteAt(app, section, sel, pos);
+      deleteAt(app, sel, pos);
       return true;
   }
 
+  if (sel.type !== 'param') return false;
+  const { node } = findNode(space, sel.uid);
   const key = e.key.toLowerCase();
-  if (key === 'm' && !e.shiftKey) {
-    if (sel.type === 'dim') moveToOtherSection(app, section, sel, pos);
-    else app.toast('Select a dimension (its row title) to move it with M.');
+  if ((key === 'f' || key === 'x') && !e.shiftKey) {
+    app.markParameter(node, key === 'f' ? 'fixed' : 'out');
     return true;
   }
-  if (section === 'problem' && sel.type === 'param' && (key === 'f' || key === 'x' || /^[0-3]$/.test(key))) {
-    const { node } = findNode(space, sel.uid);
-    if (key === 'f') app.change(() => cycleStage(node));
-    else if (key === 'x') app.change(() => toggleMark(node, 'out'));
-    else {
-      const n = Number(key);
-      app.change(() => setStage(node, n === node.stage ? null : n));
-    }
+  if (/^[1-9]$/.test(e.key)) {
+    const id = Number(e.key);
+    if (findOption(space, id)) app.pick(node, id);
+    else app.toast(`There is no option O${id}.`);
     return true;
   }
-  if (section === 'solution' && sel.type === 'param') {
-    if (/^[1-9]$/.test(e.key)) {
-      const id = Number(e.key);
-      if (findOption(space, id)) {
-        const { node } = findNode(space, sel.uid);
-        app.change(() => togglePick(node, id));
-      } else app.toast(`There is no option O${id}.`);
-      return true;
-    }
-    if (e.key === ' ' && state.pickMode && state.activeOption !== null) {
-      const { node } = findNode(space, sel.uid);
-      app.change(() => togglePick(node, state.activeOption));
-      return true;
-    }
+  if (e.key === ' ' && state.pickMode && state.activeOption !== null) {
+    app.pick(node, state.activeOption);
+    return true;
   }
   return false;
 }
 
-export async function deleteAt(app, section, sel, pos) {
+export async function deleteAt(app, sel, pos) {
   if (sel.type !== 'dim' && sel.type !== 'param') return;
   const found = findNode(app.space, sel.uid);
   if (!found) return;
@@ -514,38 +481,5 @@ export async function deleteAt(app, section, sel, pos) {
   }
   app.change(() => removeNode(app.space, sel.uid));
   const [r, c] = pos || [0, 0];
-  app.setCursor(section, fixCursor(app.space, section, null, sel.type === 'dim' ? [r, 0] : [r, c]));
-}
-
-export const otherSection = (section) => (section === 'problem' ? 'solution' : 'problem');
-const SECTION_NAMES = { problem: 'problem space', solution: 'solution space' };
-const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
-
-/**
- * Moves the selected dimension to the other grid section, then shows it there.
- * Asks first when marks (to the solution) or picks (to the problem) would be dropped.
- */
-export async function moveToOtherSection(app, section, sel, pos) {
-  if (sel.type !== 'dim') return;
-  const found = findNode(app.space, sel.uid);
-  if (!found) return;
-  const to = otherSection(section);
-  const name = `“${found.node.title || 'Untitled'}”`;
-  const { marks, picks } = moveLosses(found.node);
-  const lost =
-    to === 'solution' && marks
-      ? `${plural(marks, 'parameter loses its', 'parameters lose their')} stage or out-of-scope mark, because the solution space has neither.`
-      : to === 'problem' && picks
-        ? `${plural(picks, 'pick by an option is', 'picks by options are')} removed, because the problem space has no picks. Ratings stay as they are.`
-        : '';
-  if (lost) {
-    const ok = await app.confirm(`Move ${name} to the ${SECTION_NAMES[to]}?`, `${lost} You can undo this.`, 'Move');
-    if (!ok) return;
-  }
-  app.change(() => moveDimensionToSection(app.space, sel.uid, to));
-  const [r] = pos || [0, 0];
-  app.state.cursor[section] = fixCursor(app.space, section, null, [r, 0]);
-  app.state.cursor[to] = { type: 'dim', uid: sel.uid };
-  app.setTab(to);
-  app.toast(`Moved ${name} to the ${SECTION_NAMES[to]}. ${isMac() ? '⌘Z' : 'Ctrl+Z'} undoes it.`);
+  app.setCursor(SECTION, fixCursor(app.space, null, sel.type === 'dim' ? [r, 0] : [r, c]));
 }

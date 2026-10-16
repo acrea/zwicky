@@ -311,7 +311,7 @@ kbd {
   display: flex;
 }
 
-/* key-message band (problem statement) */
+/* key-message band (the problem statement) */
 .note-band {
   display: flex;
   align-items: flex-start;
@@ -357,15 +357,6 @@ kbd {
 }
 .note-band.band:focus-within {
   box-shadow: var(--focus-ring);
-}
-.note-band.intro .band-input {
-  font-size: var(--fs-md);
-  color: var(--ink-muted);
-  font-style: italic;
-}
-.note-band.intro:focus-within .band-input {
-  color: var(--ink);
-  font-style: normal;
 }
 .band-input::placeholder {
   color: var(--ink-faint);
@@ -458,7 +449,7 @@ svg.paths {
   white-space: pre-wrap;
 }
 /* keep titles legible where an option path runs underneath */
-.grid-canvas[data-section='solution'] .cell.param .title {
+.grid-canvas .cell.param .title {
   text-shadow:
     0 0 2px var(--bg),
     0 0 2px var(--bg),
@@ -560,20 +551,24 @@ svg.paths {
   padding-top: 10px;
 }
 
-/* states: selected, stages, out, picked, beyond the scope filter */
-.cell.stage-1 {
-  background: var(--stage-1-bg);
+/* states: selected, fixed, out, picked, beyond the scope filter */
+.cell.mark-fixed {
+  background: var(--mark-fixed-bg);
+  box-shadow: inset 3px 0 0 var(--mark-fixed-rule);
 }
-.cell.stage-1 .title {
+.cell.mark-fixed .title {
+  color: var(--mark-fixed-ink);
   font-weight: 600;
 }
-.cell.stage-2 {
-  background: var(--stage-2-bg);
+.mark-glyph {
+  position: absolute;
+  right: 5px;
+  bottom: 3px;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--mark-fixed-ink);
 }
-.cell.stage-3 {
-  background: var(--stage-3-bg);
-}
-.cell.beyond-scope > :not(.coord),
 .chip.beyond-scope,
 .opt-head.beyond-scope > * {
   opacity: var(--beyond-scope-opacity);
@@ -609,6 +604,10 @@ svg.paths {
 }
 .grid.pick-mode .cell.param {
   cursor: copy;
+}
+.grid.pick-mode .cell.param.mark-fixed,
+.grid.pick-mode .cell.param.mark-out {
+  cursor: not-allowed;
 }
 .cell.dragging {
   opacity: 0.4;
@@ -976,9 +975,17 @@ textarea.field-input {
   height: 11px;
   border: 1px solid var(--rule);
 }
-.legend-out {
-  color: var(--mark-out-ink);
-  text-decoration: line-through;
+.legend-swatch.mark-fixed {
+  background: var(--mark-fixed-bg);
+  box-shadow: inset 3px 0 0 var(--mark-fixed-rule);
+  font-size: 7px;
+  line-height: 9px;
+  text-align: right;
+  padding-right: 1px;
+  color: var(--mark-fixed-ink);
+}
+.legend-swatch.mark-out {
+  background: linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--mark-out-ink) calc(50% - 0.5px), var(--mark-out-ink) calc(50% + 0.5px), transparent calc(50% + 0.5px));
 }
 .eval-bar .scope-filter {
   margin-left: var(--space-4);
@@ -995,6 +1002,25 @@ textarea.field-input {
   display: inline-flex;
   gap: 6px;
   align-items: center;
+}
+.mark-toggle.mark-fixed:not([aria-pressed='true']) {
+  background: var(--mark-fixed-bg);
+}
+.mark-toggle.mark-out:not([aria-pressed='true']) {
+  color: var(--mark-out-ink);
+  text-decoration: line-through;
+}
+.insp-hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+.insp-hint kbd {
+  margin-left: var(--space-1);
 }
 .mark-toggle[aria-pressed='true'] kbd {
   background: transparent;
@@ -1046,6 +1072,15 @@ textarea.field-input {
 }
 .profile dd.none {
   color: var(--ink-faint);
+}
+.profile .fixed,
+.profile-table li.fixed {
+  color: var(--ink-muted);
+}
+.profile-table li.fixed::before {
+  content: '◆ ';
+  font-size: 9px;
+  color: var(--mark-fixed-ink);
 }
 .shortcuts {
   margin: 0;

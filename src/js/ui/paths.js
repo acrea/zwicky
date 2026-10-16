@@ -3,15 +3,15 @@
 // with the grid and only needs redrawing when the layout changes.
 
 import { s, clear } from './dom.js';
-import { parametersOf, inScope } from '../model.js';
+import { isSelected, inScope } from '../model.js';
 import { optionStyle } from './grid.js';
 
-/** Cell centres of an option's picks: row by row, left to right within a row. */
+/** Cell centres of an option's parameters (picked or fixed): row by row, left to right within a row. */
 function pathPoints(space, optionId, cells, origin) {
   const points = [];
-  for (const dim of space.solution.dims) {
-    for (const p of parametersOf(dim)) {
-      if (!p.picks.includes(optionId)) continue;
+  for (const dim of space.dims) {
+    for (const p of dim.params) {
+      if (!isSelected(p, optionId)) continue;
       const el = cells.get(p.uid);
       if (!el) continue;
       const r = el.getBoundingClientRect();
@@ -28,7 +28,7 @@ export function drawPaths(app, canvas) {
   const { state, space } = app;
   const active = state.activeOption;
   const ids = state.compare
-    ? space.options.items.filter((o) => o.id === active || inScope(o.stage, state.scopeUpTo)).map((o) => o.id)
+    ? space.options.filter((o) => o.id === active || inScope(o.stage, state.scopeUpTo)).map((o) => o.id)
     : active !== null
       ? [active]
       : [];

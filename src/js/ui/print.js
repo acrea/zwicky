@@ -1,11 +1,11 @@
-// Print / PDF (§5.7): a static view of all three tabs, one per printed section,
+// Print / PDF: a static view of both tabs, one per printed section,
 // with notes as numbered footnotes under each grid or matrix. It is built on
 // "beforeprint" and laid out off-screen first, so option paths can be measured,
 // then each section is scaled to fit a landscape page.
 
 import { h, s } from './dom.js';
-import { parametersOf, coordinate, rowLetter, getRating, rankOptions, scoreFraction, optionColour } from '../model.js';
-import { optionVars } from './grid.js';
+import { coordinate, rowLetter, getRating, rankOptions, scoreFraction, optionColour, inScope } from '../model.js';
+import { optionVars, MARK_INFO } from './grid.js';
 import { drawPaths } from './paths.js';
 import { swatch } from './options-bar.js';
 import { displayOptions, renderProfiles, ordinal } from './evaluation.js';
@@ -33,39 +33,38 @@ function footnotes() {
   };
 }
 
-function staticGrid(app, section, notes) {
+function staticGrid(app, notes) {
   const { space, state } = app;
-  const solution = section === 'solution';
-  const active = solution ? state.activeOption : null;
+  const active = state.activeOption;
   const grid = h('div', { class: 'grid' });
-  space[section].dims.forEach((dim, r) => {
+  space.dims.forEach((dim, r) => {
     const row = h('div', { class: 'row' });
     const dn = dim.note ? notes.add(rowLetter(r), dim.title, dim.note) : 0;
     row.append(h('div', { class: 'cell dim' }, h('span', { class: 'coord' }, rowLetter(r)), notes.mark(dn), h('div', { class: 'title' }, dim.title)));
-    parametersOf(dim).forEach((p, c) => {
+    dim.params.forEach((p, c) => {
       const coord = coordinate(r, c);
       const pn = p.note ? notes.add(coord, p.title, p.note) : 0;
-      const cls = ['cell', 'param'];
+      const cls = ['cell', 'param', p.mark && 'mark-' + p.mark];
       let style = null;
-      if (section === 'problem' && p.stage) cls.push('stage-' + p.stage);
-      else if (section === 'problem' && p.mark) cls.push('mark-' + p.mark);
       const markers = [];
-      if (solution) {
+      if (!p.mark) {
         if (active !== null && p.picks.includes(active)) {
           cls.push('picked');
           style = optionVars(active);
         }
-        for (const o of space.options.items) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
+        for (const o of space.options) {
+          if (o.id === active || !p.picks.includes(o.id) || !inScope(o.stage, state.scopeUpTo)) continue;
           markers.push(h('span', { class: ['marker', optionColour(o.id).style > 0 && 'alt'], style: optionVars(o.id) }, String(o.id)));
         }
       }
+      const glyph = p.mark && MARK_INFO[p.mark].glyph;
       row.append(
         h(
           'div',
           { class: cls, style, dataset: { uid: p.uid } },
           h('span', { class: 'coord' }, coord),
           notes.mark(pn),
+          glyph ? h('span', { class: 'mark-glyph' }, glyph) : null,
           h('div', { class: 'title' }, p.title),
           markers.length ? h('div', { class: 'markers' }, markers) : null,
         ),
@@ -73,15 +72,15 @@ function staticGrid(app, section, notes) {
     });
     grid.append(row);
   });
-  const canvas = h('div', { class: 'grid-canvas', dataset: { section } });
-  if (solution) canvas.append(s('svg', { class: 'paths', 'aria-hidden': 'true' }));
+  const canvas = h('div', { class: 'grid-canvas', dataset: { section: 'box' } });
+  canvas.append(s('svg', { class: 'paths', 'aria-hidden': 'true' }));
   canvas.append(grid);
   return canvas;
 }
 
-function band(text, kind) {
+function band(text) {
   if (!text) return null;
-  return h('div', { class: ['note-band', kind] }, kind === 'band' ? h('span', { class: 'band-arrow' }, '↣') : null, h('p', { class: 'print-note' }, text));
+  return h('div', { class: 'note-band band' }, h('span', { class: 'band-arrow' }, '↣'), h('p', { class: 'print-note' }, text));
 }
 
 function sectionHead(app, name) {
@@ -96,7 +95,7 @@ function sectionHead(app, name) {
 
 function optionLegend(app) {
   const { state } = app;
-  const items = app.space.options.items;
+  const items = app.space.options;
   if (!items.length) return null;
   return h(
     'ul',
@@ -134,7 +133,7 @@ function ratingMatrix(app, opts, notes) {
     ),
   );
   const body = h('tbody');
-  for (const c of space.criteria.items) {
+  for (const c of space.criteria) {
     const cn = c.note ? notes.add('C' + c.id, c.title, c.note) : 0;
     const tr = h('tr', null, h('th', { class: 'crit-col ecell crit' }, h('span', { class: 'id' }, 'C' + c.id), c.title, notes.mark(cn)), h('td', { class: ['weight-col', 'ecell', 'weight', c.weight === 0 && 'zero'] }, h('span', { class: 'w-val' }, String(c.weight))));
     for (const o of opts) {
@@ -181,28 +180,23 @@ export function preparePrint(app) {
   const root = h('div', { class: 'print-root', 'aria-hidden': 'true' });
   const sections = [];
 
-  if (space.problem.note || space.problem.dims.length) {
+  let boxCanvas = null;
+  if (space.problem || space.dims.length) {
     const notes = footnotes();
-    const grid = staticGrid(app, 'problem', notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Problem'), band(space.problem.note, 'band'), h('div', { class: 'legend' }, legendItems(app, 'problem')), grid, notes.render()));
-  }
-  let solutionCanvas = null;
-  if (space.solution.note || space.solution.dims.length) {
-    const notes = footnotes();
-    solutionCanvas = staticGrid(app, 'solution', notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Solution'), band(space.solution.note, 'intro'), h('div', { class: 'legend' }, legendItems(app, 'solution')), optionLegend(app), solutionCanvas, notes.render()));
+    boxCanvas = staticGrid(app, notes);
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), h('div', { class: 'legend' }, legendItems(app)), optionLegend(app), boxCanvas, notes.render()));
   }
   const opts = displayOptions(app);
-  if (opts.length || space.criteria.items.length) {
+  if (opts.length || space.criteria.length) {
     const notes = footnotes();
     sections.push(
       h(
         'section',
         { class: 'print-section' },
         sectionHead(app, 'Evaluation'),
-        opts.length && space.solution.dims.length ? h('div', { class: 'print-block' }, h('h2', { class: 'section-title' }, 'Option profiles'), renderProfiles(app, opts)) : null,
-        space.criteria.items.length ? h('div', { class: 'print-block' }, h('h2', { class: 'section-title' }, 'Ratings'), ratingMatrix(app, opts, notes)) : null,
-        space.criteria.items.length ? notes.render() : null,
+        opts.length && space.dims.length ? h('div', { class: 'print-block' }, h('h2', { class: 'section-title' }, 'Option profiles'), renderProfiles(app, opts)) : null,
+        space.criteria.length ? h('div', { class: 'print-block' }, h('h2', { class: 'section-title' }, 'Ratings'), ratingMatrix(app, opts, notes)) : null,
+        space.criteria.length ? notes.render() : null,
       ),
     );
   }
@@ -211,7 +205,7 @@ export function preparePrint(app) {
   document.body.append(root);
 
   // measure at full size, then scale each section to the page width
-  if (solutionCanvas) drawPaths(app, solutionCanvas);
+  if (boxCanvas) drawPaths(app, boxCanvas);
   for (const sec of sections) {
     const w = sec.scrollWidth;
     if (w > PAGE_WIDTH) sec.style.zoom = String(Math.max(0.35, PAGE_WIDTH / w));

@@ -1,4 +1,4 @@
-// Options bar above the Solution grid (§3.3): one chip per option, "+ Option",
+// Options bar above the box: one chip per option, "+ Option",
 // and the compare / line-style toggles.
 
 import { h, s } from './dom.js';
@@ -24,7 +24,7 @@ export function renderOptionsBar(app) {
   bar.append(label);
 
   const chips = h('div', { class: 'chips' });
-  for (const o of space.options.items) {
+  for (const o of space.options) {
     const active = state.activeOption === o.id;
     const chip = h(
       'button',
@@ -72,7 +72,7 @@ export function renderOptionsBar(app) {
     const chip = e.target.closest('.chip');
     if (dragId === null || !chip) return;
     e.preventDefault();
-    const items = space.options.items;
+    const items = space.options;
     const from = items.findIndex((o) => o.id === dragId);
     const r = chip.getBoundingClientRect();
     let to = items.findIndex((o) => o.id === Number(chip.dataset.id)) + (e.clientX < r.left + r.width / 2 ? 0 : 1);
@@ -129,13 +129,13 @@ export function renderOptionsBar(app) {
   bar.append(toggles);
 
   if (state.pickMode && state.activeOption !== null) {
-    const o = space.options.items.find((x) => x.id === state.activeOption);
+    const o = space.options.find((x) => x.id === state.activeOption);
     bar.append(
       h(
         'div',
         { class: 'pick-hint', role: 'status', style: optionVars(state.activeOption) },
         h('strong', null, 'Picking for O' + state.activeOption + (o && o.title ? ' ' + o.title : '')),
-        ' — click parameters (or press Space) to toggle them. Esc to finish.',
+        ' — click open parameters (or press Space) to toggle them. Esc to finish.',
       ),
     );
   }
