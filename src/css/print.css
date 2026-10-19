@@ -99,6 +99,12 @@
   font-weight: 600;
   color: var(--ink);
 }
+/* the legend box sits under the grid, at the right */
+.print-section > .legend-box {
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-2) 0 0 auto;
+}
 /* bands, legends and footnotes take the width of the grid instead of widening the section */
 .print-section > .note-band,
 .print-section > .print-legend,

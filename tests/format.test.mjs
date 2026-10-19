@@ -42,10 +42,10 @@ test('car concept: parsed content', () => {
     [
       ['Petrol 100–200 hp', null, []],
       ['Petrol 200–300 hp', null, []],
-      ['Diesel', null, [3]],
+      ['Diesel', null, [5]],
       ['Hybrid', null, [1]],
       ['Hydrogen', 'out', []],
-      ['Electric', null, [2, 4, 5]],
+      ['Electric', null, [2, 3, 4]],
     ],
   );
   const target = space.dims.find((d) => d.title === 'Target group');
@@ -55,9 +55,9 @@ test('car concept: parsed content', () => {
     [
       [1, 'Athletic hybrid SUV', null],
       [2, 'City coupé', null],
-      [4, 'City coupé with rail partnership', 2],
-      [5, 'Long-distance coupé', 4],
-      [3, 'Family hauler', null],
+      [3, 'City coupé with rail partnership', 2],
+      [4, 'Long-distance coupé', 3],
+      [5, 'Family hauler', null],
     ],
   );
   assert.deepEqual(
@@ -73,7 +73,7 @@ test('car concept: parsed content', () => {
     note: 'Two target groups; assumes LOHAS and WOOPIEs overlap little.',
     tags: [],
   });
-  assert.equal(space.ratings.O3.C3, undefined);
+  assert.equal(space.ratings.O5.C3, undefined);
 });
 
 test('car concept: several picks in one dimension, none in another', () => {
@@ -440,4 +440,35 @@ test('stages from earlier drafts are only unknown keys and tags now', () => {
   assert.deepEqual(space.meta.extra, [['stages', 'Pilot, Rollout, Full']]);
   assert.deepEqual(space.options[0].tags, ['stage=2']);
   assert.ok(report.some((r) => /Unknown tag "stage=2" kept/.test(r.message)));
+});
+
+// ---------------------------------------------------------------- numbers and colours
+
+test('option ids out of order are renumbered to follow the order; picks, ratings and links follow', () => {
+  const src = '---\nzwicky: 2\n---\n# Box\n## D\n- a {O3}\n- b {O1 O7}\n# Options\n## O3 First\n## O7 Second {extends=O3}\n## O1 Third\n# Criteria\n## C1 X\n# Ratings\n## O1 Third\n- C1: 2\n## O7 Second\n- C1: 5\n';
+  const { space, report } = parse(src);
+  assert.deepEqual(space.options.map((o) => [o.id, o.title, o.extends]), [[1, 'First', null], [2, 'Second', 1], [3, 'Third', null]]);
+  assert.deepEqual(space.dims[0].params.map((p) => p.picks), [[1], [2, 3]]);
+  assert.deepEqual([space.ratings.O2.C1.score, space.ratings.O3.C1.score], [5, 2]);
+  assert.deepEqual(report.map((r) => [r.line, r.level, r.message]), [[9, 'info', 'Options renumbered to follow their order: O3 → O1, O7 → O2, O1 → O3.']]);
+  // colours stay with their option: O3's usual colour 3 is now written on O1
+  assert.match(serialize(space), /\n## O1 First \{colour=3\}\n\n## O2 Second \{extends=O1\}\n\n## O3 Third \{colour=1\}\n/);
+});
+
+test('{colour=n} sets the colour of a solution; it is written only when it is not the usual one', () => {
+  const src = '---\nzwicky: 2\nscale: 1-5\n---\n\n# Options\n\n## O1 A {colour=4}\n\n## O2 B\n\n## O3 C {extends=O1}\n';
+  const { space, report } = parse(src);
+  assert.deepEqual(report, []);
+  assert.deepEqual(space.options.map((o) => o.colour), [4, 2, 4]);
+  assert.equal(serialize(space), src);
+  space.options[0].colour = 1;
+  assert.doesNotMatch(serialize(space), /colour=/);
+});
+
+test('a colour on an extension is ignored; an invalid colour is an unknown tag', () => {
+  const { space, report } = parse('---\nzwicky: 2\n---\n# Options\n## O1 A\n## O2 B {extends=O1 colour=5}\n## O3 C {colour=9}\n');
+  assert.deepEqual(space.options.map((o) => o.colour), [1, 1, 3]);
+  assert.deepEqual(space.options[2].tags, ['colour=9']);
+  assert.match(report.find((r) => r.line === 6).message, /family's colour; "colour=5" ignored/);
+  assert.match(report.find((r) => r.line === 7).message, /Unknown tag "colour=9"/);
 });

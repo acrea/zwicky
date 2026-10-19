@@ -9,7 +9,7 @@ import { optionVars, MARK_INFO } from './grid.js';
 import { drawPaths } from './paths.js';
 import { swatch, extendsRef } from './options-bar.js';
 import { displayOptions, renderProfiles, ordinal } from './evaluation.js';
-import { legendItems } from './legend.js';
+import { renderLegend } from './legend.js';
 
 // Landscape A4 or Letter with 12 mm margins is at least ~960 CSS px wide.
 const PAGE_WIDTH = 960;
@@ -27,7 +27,7 @@ function footnotes() {
       return h(
         'ol',
         { class: 'footnotes' },
-        list.map((f) => h('li', null, h('span', { class: 'fn-ref' }, f.ref), f.title ? h('span', { class: 'fn-title' }, f.title) : null, h('span', { class: 'fn-text' }, f.text))),
+        list.map((f) => h('li', null, f.ref ? h('span', { class: 'fn-ref' }, f.ref) : null, f.title ? h('span', { class: 'fn-title' }, f.title) : null, h('span', { class: 'fn-text' }, f.text))),
       );
     },
   };
@@ -39,11 +39,11 @@ function staticGrid(app, notes) {
   const grid = h('div', { class: 'grid' });
   space.dims.forEach((dim, r) => {
     const row = h('div', { class: 'row' });
-    const dn = dim.note ? notes.add(rowLetter(r), dim.title, dim.note) : 0;
+    const dn = dim.note ? notes.add(state.coords ? rowLetter(r) : '', dim.title, dim.note) : 0;
     row.append(h('div', { class: 'cell dim' }, h('span', { class: 'coord' }, rowLetter(r)), notes.mark(dn), h('div', { class: 'title' }, dim.title)));
     dim.params.forEach((p, c) => {
       const coord = coordinate(r, c);
-      const pn = p.note ? notes.add(coord, p.title, p.note) : 0;
+      const pn = p.note ? notes.add(state.coords ? coord : '', p.title, p.note) : 0;
       const cls = ['cell', 'param', p.mark && 'mark-' + p.mark];
       let style = null;
       const markers = [];
@@ -53,8 +53,8 @@ function staticGrid(app, notes) {
           style = optionVars(space, active);
         }
         for (const o of space.options) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
-          markers.push(h('span', { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt'], style: optionVars(space, o.id) }, String(o.id)));
+          if (!p.picks.includes(o.id)) continue;
+          markers.push(h('span', { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt', o.id === active && 'active'], style: optionVars(space, o.id) }, String(o.id)));
         }
       }
       const glyph = p.mark && MARK_INFO[p.mark].glyph;
@@ -184,7 +184,7 @@ export function preparePrint(app) {
   if (space.problem || space.dims.length) {
     const notes = footnotes();
     boxCanvas = staticGrid(app, notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), h('div', { class: 'legend' }, legendItems()), optionLegend(app), boxCanvas, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), optionLegend(app), boxCanvas, renderLegend(), notes.render()));
   }
   const opts = displayOptions(app);
   if (opts.length || space.criteria.length) {

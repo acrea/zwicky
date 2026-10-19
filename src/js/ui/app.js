@@ -52,7 +52,7 @@ const app = {
     evalView: { sortByRank: false, showNotes: false, heatmap: false, ...(prefs.evalView || {}) },
     inspectorOpen: prefs.inspectorOpen !== false,
     density: DENSITIES.includes(prefs.density) ? prefs.density : 'normal',
-    coords: prefs.coords !== false,
+    coords: prefs.coords === true, // off unless turned on in View → Coordinates
     dirty: false,
     handle: null,
     fileName: '',
@@ -83,10 +83,39 @@ app.markDirty = () => {
 
 // ---------------------------------------------------------------- changes
 
+/** Option uid by id, to follow options through renumbering (see followOptions). */
+const optionUids = (space) => new Map(space.options.map((o) => [o.id, o.uid]));
+
+/**
+ * Options are renumbered whenever their order changes, so view state that
+ * names an option by id (active option, inspected option, selected rating)
+ * is moved to the option's new id, or cleared if the option is gone.
+ */
+function followOptions(before) {
+  const { state, space } = app;
+  const now = new Map(space.options.map((o) => [o.uid, o.id]));
+  const to = (id) => (before.has(id) && now.has(before.get(id)) ? now.get(before.get(id)) : null);
+  if (state.activeOption !== null) {
+    state.activeOption = to(state.activeOption);
+    if (state.activeOption === null) state.pickMode = false;
+  }
+  for (const tab of Object.keys(state.inspect)) {
+    const insp = state.inspect[tab];
+    if (insp && insp.type === 'option') state.inspect[tab] = to(insp.id) === null ? null : { type: 'option', id: to(insp.id) };
+  }
+  const cur = state.cursor.evaluation;
+  if (cur && cur.type === 'rating') {
+    const [cid, oid] = cur.uid.split(':').map(Number);
+    state.cursor.evaluation = to(oid) === null ? null : { type: 'rating', uid: `${cid}:${to(oid)}` };
+  }
+}
+
 /** Records an undo step, applies `fn`, marks the document dirty and re-renders. */
 app.change = (fn) => {
   app.history.record(app.space);
+  const before = optionUids(app.space);
   const result = fn();
+  followOptions(before);
   app.markDirty();
   app.render();
   return result;
@@ -108,14 +137,18 @@ function afterRestore() {
 app.undo = () => {
   const prev = app.history.undo(app.space);
   if (!prev) return;
+  const before = optionUids(app.space);
   app.space = prev;
+  followOptions(before);
   afterRestore();
 };
 
 app.redo = () => {
   const next = app.history.redo(app.space);
   if (!next) return;
+  const before = optionUids(app.space);
   app.space = next;
+  followOptions(before);
   afterRestore();
 };
 
@@ -458,7 +491,6 @@ function renderMain() {
     if (tab === 'box') {
       els.head.append(problemBand());
       els.head.append(renderOptionsBar(app));
-      els.head.append(renderLegend());
     }
     if (tab === 'evaluation') els.head.append(renderEvalHead(app));
   }
@@ -472,7 +504,7 @@ function renderMain() {
     if (state.editing && state.editing.section !== tab) state.editing = null;
     const { el, focusEl } = renderGrid(app);
     const scroller = h('div', { class: 'grid-scroll', dataset: { tab } }, el);
-    els.body.append(scroller);
+    els.body.append(scroller, renderLegend());
     const [sl, st] = state.scroll[tab] || [0, 0];
     scroller.scrollLeft = sl;
     scroller.scrollTop = st;
