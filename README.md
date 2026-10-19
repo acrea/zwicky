@@ -2,7 +2,7 @@
 
 A browser-only tool to state a problem, span a morphological box (the "Zwicky box") of dimensions and parameters, mark what is already fixed or out, compose options from what is open, and rate those options against criteria. Named after Fritz Zwicky, the Swiss astrophysicist who formalised morphological analysis.
 
-**Status:** 2.0.0 (see [`VERSION`](VERSION)).
+**Status:** 2.1.0 (see [`VERSION`](VERSION)).
 
 ## Use it
 
