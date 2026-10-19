@@ -95,7 +95,7 @@ Requires Node 20 or later. No npm packages.
 
 ```sh
 node build.mjs       # writes dist/zwicky.html (commit it: it is the product)
-node --test          # unit tests: format, model, scoring
+node --test          # unit tests: format, model, scoring, share links
 node tests/e2e.mjs   # optional browser checks; needs Playwright (npm i -g playwright)
 ```
 
