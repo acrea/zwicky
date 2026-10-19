@@ -85,16 +85,16 @@ await check('marking a picked parameter out asks first; cancel keeps it, confirm
   await cell('Electric').click();
   await page.keyboard.press('x');
   await page.locator('dialog[open]').waitFor();
-  assert.match(await page.locator('dialog[open]').innerText(), /picked by O2, O4, O5/);
+  assert.match(await page.locator('dialog[open]').innerText(), /picked by O2, O3, O4/);
   await page.keyboard.press('Escape');
   await page.locator('dialog[open]').waitFor({ state: 'detached' });
-  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2, 4, 5]]);
+  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2, 3, 4]]);
   await page.keyboard.press('x');
   await page.getByRole('button', { name: 'Mark as out' }).click();
   await page.waitForFunction(() => window.zwicky.markdown().includes('- Electric {out}'));
   assert.deepEqual(param(await space(), 'Electric').picks, []);
   await page.keyboard.press('Control+z');
-  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2, 4, 5]]);
+  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2, 3, 4]]);
 });
 
 await check('marking a picked parameter fixed needs no confirm: every option has it now', async () => {
@@ -104,7 +104,7 @@ await check('marking a picked parameter fixed needs no confirm: every option has
   assert.deepEqual([param(await space(), 'Diesel').mark, param(await space(), 'Diesel').picks], ['fixed', []]);
   assert.match(await page.locator('.toast').innerText(), /every option has it now/);
   await page.keyboard.press('Control+z');
-  assert.deepEqual([param(await space(), 'Diesel').mark, param(await space(), 'Diesel').picks], [null, [3]]);
+  assert.deepEqual([param(await space(), 'Diesel').mark, param(await space(), 'Diesel').picks], [null, [5]]);
 });
 
 await check('fixed and out parameters cannot be picked', async () => {
@@ -256,25 +256,41 @@ await check('chip click enters pick mode; clicking cells toggles picks; marked c
 
 await check('digit keys toggle picks for O1–O9', async () => {
   await cell('slim').click();
-  await page.keyboard.press('3');
-  assert.deepEqual(param(await space(), 'slim').picks, [3]);
-  assert.equal(await cell('slim').locator('.marker').innerText(), '3');
+  await page.keyboard.press('5');
+  assert.deepEqual(param(await space(), 'slim').picks, [5]);
+  assert.equal(await cell('slim').locator('.marker').innerText(), '5');
 });
 
 await check('compare draws every option; extensions are dashed, then dotted, in the colour they start from', async () => {
   await page.getByRole('button', { name: 'Compare' }).click();
   assert.equal(await page.locator('svg.paths g.path').count(), 5);
   const dashes = await page.locator('svg.paths polyline').evaluateAll((els) => els.map((el) => el.getAttribute('stroke-dasharray')).filter(Boolean));
-  assert.deepEqual(dashes.sort(), ['1.5 4', '6 4'], 'O4 dashed, O5 dotted');
+  assert.deepEqual(dashes.sort(), ['1.5 4', '6 4'], 'O3 dashed, O4 dotted');
   const colours = await z(() => [...document.querySelectorAll('.chip[data-id]')].map((c) => [c.dataset.id, c.style.getPropertyValue('--opt')]));
   const colour = Object.fromEntries(colours);
+  assert.equal(colour['3'], colour['2']);
   assert.equal(colour['4'], colour['2']);
-  assert.equal(colour['5'], colour['2']);
   assert.notEqual(colour['1'], colour['2']);
-  assert.match(await chip(4).innerText(), /↳ O2/);
-  assert.match(await chip(5).innerText(), /↳ O4/);
+  assert.match(await chip(3).innerText(), /↳ O2/);
+  assert.match(await chip(4).innerText(), /↳ O3/);
   await page.getByRole('button', { name: 'Compare' }).click();
   assert.equal(await page.getByRole('button', { name: 'Line styles' }).count(), 0);
+});
+
+await check('switching the shown option keeps every cell the same size; its markers are ringed', async () => {
+  const sizes = () => page.locator('.grid .row').evaluateAll((rows) => rows.map((r) => r.getBoundingClientRect().height));
+  await chip(1).click();
+  await page.keyboard.press('Escape');
+  const before = await sizes();
+  for (const id of [2, 5, 3]) {
+    await chip(id).click();
+    await page.keyboard.press('Escape');
+    assert.deepEqual(await sizes(), before, `after showing O${id}`);
+  }
+  assert.ok((await page.locator('.cell .marker.active').count()) > 0);
+  assert.equal(await cell('Diesel').locator('.marker').count(), 1, 'O5 keeps its marker while O3 is shown');
+  await chip(1).click();
+  await page.keyboard.press('Escape');
 });
 
 await check('+ Option, rename in the inspector, duplicate and delete', async () => {
@@ -291,14 +307,15 @@ await check('+ Option, rename in the inspector, duplicate and delete', async () 
   await page.getByRole('button', { name: 'Duplicate' }).click();
   await page.keyboard.press('Enter');
   const s = await space();
-  assert.deepEqual(s.options.map((o) => o.id), [1, 2, 4, 5, 3, 6, 7], 'after duplicate: ' + JSON.stringify(s.options.map((o) => o.id)));
+  assert.deepEqual(s.options.map((o) => o.title), ['Athletic hybrid SUV', 'City coupé', 'City coupé with rail partnership', 'Long-distance coupé', 'Family hauler', 'Robo taxi', 'Robo taxi']);
+  assert.deepEqual(s.options.map((o) => o.id), [1, 2, 3, 4, 5, 6, 7]);
   assert.ok(param(s, 'Electric').picks.includes(7));
   await chip(7).click();
   await page.getByRole('button', { name: 'Delete option' }).click();
   await page.locator('dialog[open] .btn.danger').click();
   await page.waitForFunction(() => window.zwicky.space.options.length === 6); // the dialog closes asynchronously
   const s2 = await space();
-  assert.deepEqual(s2.options.map((o) => o.id), [1, 2, 4, 5, 3, 6], 'after delete: ' + JSON.stringify(s2.options.map((o) => o.id)));
+  assert.deepEqual(s2.options.map((o) => o.id), [1, 2, 3, 4, 5, 6], 'after delete: ' + JSON.stringify(s2.options.map((o) => o.id)));
   assert.ok(!param(s2, 'Electric').picks.includes(7));
 });
 
@@ -315,7 +332,7 @@ await check('evaluation: profiles list picks per dimension, fixed parameters for
 await check('evaluation: the profile of an extension highlights what it adds to the option it extends', async () => {
   const added = await page.locator('.profile-table li.added').allInnerTexts();
   assert.deepEqual(added.sort(), ['5', 'Rail partnership for long distance', 'WOOPIEs']);
-  assert.match(await page.locator('.profile-table thead .opt-head[data-option="5"]').innerText(), /↳ O4/);
+  assert.match(await page.locator('.profile-table thead .opt-head[data-option="4"]').innerText(), /↳ O3/);
 });
 
 await check('evaluation: digits score, weights and totals update, Delete clears', async () => {
@@ -419,9 +436,9 @@ await check('save falls back to a download with the canonical file', async () =>
 
 await check('legend explains fixed, out, paths and extensions; there is no scope filter', async () => {
   await page.click('#tab-box');
-  const legend = await page.locator('.legend').innerText();
-  for (const t of ['Rows', 'Cells', 'Fixed', 'Out', 'Paths', 'Extensions']) assert.ok(legend.includes(t), t);
-  assert.equal(await page.locator('.legend-line').count(), 3);
+  const legend = await page.locator('.legend-box').innerText();
+  for (const t of ['Legend', 'Fixed', 'Out', 'Option', 'Extensions']) assert.ok(legend.includes(t), t);
+  assert.equal(await page.locator('.legend-box .legend-line').count(), 3);
   assert.equal(await page.getByText('Scope up to').count(), 0);
   assert.equal(await page.getByText(/Horizon/).count(), 0);
 });
@@ -433,30 +450,73 @@ await check('Extend starts a linked option with the same picks, in pick mode; th
   await page.waitForFunction(() => window.zwicky.space.options.some((o) => o.extends === 1));
   const s = await space();
   const ext = s.options.find((o) => o.extends === 1);
-  assert.equal(ext.id, 7);
-  assert.deepEqual(s.options.map((o) => o.id), [1, 7, 2, 4, 5, 3, 6], 'placed right after O1');
-  assert.ok(param(s, 'athletic').picks.includes(7), 'starts with the picks of O1');
+  assert.equal(ext.id, 2, 'placed right after O1, and numbered so');
+  assert.deepEqual(s.options.map((o) => o.title).slice(0, 3), ['Athletic hybrid SUV', 'Athletic hybrid SUV (extended)', 'City coupé']);
+  assert.ok(param(s, 'athletic').picks.includes(2), 'starts with the picks of O1');
+  assert.deepEqual(param(s, 'Diesel').picks, [6], 'the family hauler is O6 now');
   assert.equal(await page.locator('.pick-hint').count(), 1, 'pick mode is on');
   assert.equal(ext.title, 'Athletic hybrid SUV (extended)');
   assert.equal(await page.inputValue('#inspector-title'), 'Athletic hybrid SUV (extended)');
   assert.notEqual(await z(() => document.activeElement.id), 'inspector-title', 'the title is not focused, so typing does not overwrite it');
-  assert.match(await md(), /\n## O7 Athletic hybrid SUV \(extended\) \{extends=O1\}\n/);
-  assert.match(await chip(7).innerText(), /↳ O1/);
+  assert.match(await md(), /\n## O2 Athletic hybrid SUV \(extended\) \{extends=O1\}\n/);
+  assert.match(await chip(2).innerText(), /↳ O1/);
   await page.keyboard.press('Escape');
 });
 
 await check('the Extends choice links and unlinks an option, and offers no loops', async () => {
-  await chip(2).dblclick();
+  await chip(3).dblclick(); // the coupé is O3 now
   await page.keyboard.press('Escape');
   const values = await page.locator('#inspector-extends option').evaluateAll((els) => els.map((el) => el.value));
-  assert.deepEqual(values, ['', '1', '7', '3', '6'], 'O2 cannot extend O4 or O5, which extend O2');
-  await page.locator('#inspector-extends').selectOption('3');
-  assert.match(await md(), /\n## O2 City coupé \{extends=O3\}\n/);
+  assert.deepEqual(values, ['', '1', '2', '6', '7'], 'O3 cannot extend O4 or O5, which extend O3');
+  const before = await md();
+  assert.match(before, /\n## O3 City coupé \{colour=2\}\n/, 'renumbered from O2, it keeps its colour');
+  await page.locator('#inspector-extends').selectOption('6');
+  assert.match(await md(), /\n## O3 City coupé \{extends=O6\}\n/);
   await page.locator('#inspector-extends').selectOption('');
-  assert.match(await md(), /\n## O2 City coupé\n/);
+  assert.match(await md(), /\n## O3 City coupé( \{colour=\d\})?\n/);
   await page.keyboard.press('Control+z');
   await page.keyboard.press('Control+z');
-  assert.match(await md(), /\n## O2 City coupé\n/);
+  assert.equal(await md(), before);
+});
+
+await check('dragging a chip renumbers the options everywhere; colours, picks and ratings stay with them', async () => {
+  const before = await space();
+  const titles = (s) => s.options.map((o) => o.title);
+  const hauler = before.options.find((o) => o.title === 'Family hauler');
+  const colourOf = (id) => chip(id).evaluate((el) => el.style.getPropertyValue('--opt'));
+  const haulerColour = await colourOf(hauler.id);
+  await chip(hauler.id).dragTo(chip(1), { targetPosition: { x: 3, y: 8 } });
+  await page.waitForFunction(() => window.zwicky.space.options[0].title === 'Family hauler');
+  const s = await space();
+  assert.deepEqual(titles(s), ['Family hauler', ...titles(before).filter((t) => t !== 'Family hauler')]);
+  assert.deepEqual(s.options.map((o) => o.id), s.options.map((_, i) => i + 1));
+  assert.equal(await colourOf(1), haulerColour, 'the colour moved with the option');
+  assert.deepEqual(param(s, 'Diesel').picks, [1]);
+  assert.equal(s.ratings.O1.C1.score, 4);
+  assert.match(await chip(1).innerText(), /O1\s*Family hauler/);
+  await page.click('#tab-evaluation');
+  const heads = await page.locator('.rating-table thead .opt-head .opt-title').allInnerTexts();
+  assert.equal(heads[0], 'Family hauler', 'the evaluation columns follow the new order');
+  await page.click('#tab-box');
+  await page.keyboard.press('Control+z');
+  assert.deepEqual(titles(await space()), titles(before), 'one undo restores order and numbers');
+});
+
+await check('coordinates are off by default; the legend is a small box under the grid', async () => {
+  await z(() => localStorage.removeItem('zwicky.prefs'));
+  await page.reload();
+  await page.waitForSelector('.grid');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.coords), 'off');
+  assert.equal(await page.locator('.cell .coord').first().isVisible(), false);
+  const box = page.locator('.tab-body > .legend-box');
+  assert.match(await box.innerText(), /^Legend/);
+  assert.equal(await page.locator('.tab-head .legend').count(), 0, 'no legend in the header');
+  const legend = await box.innerText();
+  for (const t of ['Fixed', 'Out', 'Option', 'Extensions']) assert.ok(legend.includes(t), t);
+  assert.ok(!/Rows|Cells/.test(legend));
+  await page.locator('.menu-btn', { hasText: 'View' }).click();
+  await page.getByRole('menuitemcheckbox', { name: 'Coordinates' }).click();
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.coords), 'on');
 });
 
 await check('every example opens without a report and saves back byte-identically (apart from updated)', async () => {

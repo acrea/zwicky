@@ -13,6 +13,10 @@ import {
   createCriterion,
   clampWeight,
   canExtend,
+  colourSlot,
+  syncColours,
+  renumberOptions,
+  OPTION_COLOURS,
   cleanTitle,
   optionKey,
   criterionKey,
@@ -230,6 +234,7 @@ function parseBody(lines, report) {
   const criterionRecs = [];
   const pickRefs = []; // { param, id, line }
   const extendRefs = []; // { option, id, line }
+  const colourRefs = new Map(); // option -> { colour, line }
   const ratingBlocks = [];
 
   const setTarget = (t) => {
@@ -339,7 +344,10 @@ function parseBody(lines, report) {
         for (const tok of tokens) {
           const w = /^w=(-?\d+)$/.exec(tok);
           const ext = /^extends=O(\d+)$/.exec(tok);
-          if (section === 'options' && ext) {
+          const colour = /^colour=(\d+)$/.exec(tok);
+          if (section === 'options' && colour && Number(colour[1]) >= 1 && Number(colour[1]) <= OPTION_COLOURS && !colourRefs.has(item)) {
+            colourRefs.set(item, { colour: Number(colour[1]), line: ln });
+          } else if (section === 'options' && ext) {
             if (extendRefs.some((r) => r.option === item)) add(ln, 'warning', `Option extends more than one option; "${tok}" dropped.`);
             else extendRefs.push({ option: item, id: Number(ext[1]), line: ln });
           } else if (section === 'criteria' && w) {
@@ -508,6 +516,14 @@ function parseBody(lines, report) {
     else ref.option.extends = ref.id;
   }
 
+  // ---- colours: as given, else the usual one for the number in the file; extensions take their family's
+  for (const o of space.options) o.colour = colourRefs.has(o) ? colourRefs.get(o).colour : colourSlot(o.id);
+  syncColours(space);
+  for (const [o, ref] of colourRefs) {
+    if (o.extends !== null && o.colour !== ref.colour)
+      add(ref.line, 'info', `O${o.id} extends O${o.extends}, so it has its family's colour; "colour=${ref.colour}" ignored.`);
+  }
+
   // ---- ratings
   const { min, max } = space.meta.scale;
   for (const block of ratingBlocks) {
@@ -534,6 +550,13 @@ function parseBody(lines, report) {
       if (row[ck]) add(e.line, 'warning', `Second rating for O${block.id} × C${e.cid}; the last one wins.`);
       row[ck] = { score, note, tags: e.tags };
     }
+  }
+
+  // ---- option ids follow the order of the options
+  const renumbered = renumberOptions(space);
+  if (renumbered.size) {
+    const list = [...renumbered].map(([from, to]) => `O${from} → O${to}`).join(', ');
+    add(optionRecs[0].line, 'info', `Options renumbered to follow their order: ${list}.`);
   }
 
   // ---- passthrough
@@ -623,7 +646,9 @@ export function serialize(space) {
     heading('# Options');
     for (const o of space.options) {
       const ext = o.extends !== null && optionIds.has(o.extends) ? ['extends=O' + o.extends] : [];
-      heading(itemLine('## O' + o.id, o.title, [...ext, ...o.tags]));
+      // a solution's colour is written only when it is not the usual one for its number
+      const colour = !ext.length && o.colour && o.colour !== colourSlot(o.id) ? ['colour=' + o.colour] : [];
+      heading(itemLine('## O' + o.id, o.title, [...ext, ...colour, ...o.tags]));
       note(o.note, '');
     }
   }

@@ -16,7 +16,7 @@ A workshop does not ask "is this part of the problem or of the solution?", but "
 2. **Options.** Add options, click an option's chip, then click the open parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through its picks and every fixed parameter; *Compare* draws all options at once. To plan a solution in steps, select an option and press *Extend* in the inspector: the extension starts with the same picks and the title "… (extended)", is drawn in the same colour with a dashed path (a second extension: dotted), and its profile in the Evaluation tab highlights what it adds.
 3. **Evaluation.** Compare the options' profiles side by side, add criteria with weights (0–10), and rate every option against every criterion. Every rating can carry a note with the rationale or assumption. zwicky computes the weighted score and the rank.
 
-Every item (dimension, parameter, option, criterion, rating) can hold a plain-text note. Select something to edit it in the inspector on the right (`I` shows or hides it). Press `?` for help, the keyboard shortcuts and the examples.
+Options are numbered in their order: drag a chip to reorder them, and every number follows (picks, ratings, links); each option keeps its colour. Every item (dimension, parameter, option, criterion, rating) can hold a plain-text note. Select something to edit it in the inspector on the right (`I` shows or hides it). Press `?` for help, the keyboard shortcuts and the examples.
 
 **Print / PDF** prints the box and the evaluation, each on its own landscape page, with notes as numbered footnotes, ready to drop into a slide deck.
 

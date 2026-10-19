@@ -141,12 +141,14 @@ export function renderGrid(app) {
           cls.push('picked');
           style = optionVars(space, active);
         }
+        // every picking option gets a marker, the active one ringed, so a
+        // cell's size never depends on which option is shown
         for (const o of space.options) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
+          if (!p.picks.includes(o.id)) continue;
           markers.push(
             h(
               'span',
-              { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt'], style: optionVars(space, o.id), title: `O${o.id} ${o.title}` },
+              { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt', o.id === active && 'active'], style: optionVars(space, o.id), title: `O${o.id} ${o.title}` },
               String(o.id),
             ),
           );

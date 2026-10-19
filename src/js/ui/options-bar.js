@@ -2,7 +2,7 @@
 // compare toggle. An extension's chip names the option it extends.
 
 import { h, s } from './dom.js';
-import { addOption, moveItem } from '../model.js';
+import { addOption, moveOption } from '../model.js';
 import { optionVars, optionStyle } from './grid.js';
 
 /** A small colour swatch that also shows the option's line style (dashed or dotted for extensions). */
@@ -83,7 +83,7 @@ export function renderOptionsBar(app) {
     let to = items.findIndex((o) => o.id === Number(chip.dataset.id)) + (e.clientX < r.left + r.width / 2 ? 0 : 1);
     if (from < to) to -= 1;
     dragId = null;
-    if (from !== to) app.change(() => moveItem(items, from, to));
+    if (from !== to) app.change(() => moveOption(space, from, to));
   });
   chips.addEventListener('dragend', () => {
     dragId = null;

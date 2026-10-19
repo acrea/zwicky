@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4lfPOEpUIzGuRHLIlW49SjaH0hHfpHys02I/SGBjHkw='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-c6ZtW4tsm1srchBnaQlAQJHPg6ed4ED3fyorYNfHRSM='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>zwicky.</title>
     <meta name="description" content="State the problem, span a morphological box, mark what is fixed or out, compose options and rate them against criteria. Runs entirely in your browser." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Ctext x='7' y='24' font-family='Georgia,serif' font-weight='700' font-size='22' fill='%23fff'%3Ez%3C/text%3E%3Ccircle cx='25' cy='22' r='2.6' fill='%231A8C9E'/%3E%3C/svg%3E" />
@@ -491,6 +491,7 @@ kbd {
   flex: 1;
   min-height: 0;
   display: flex;
+  flex-direction: column;
 }
 
 /* key-message band (the problem statement) */
@@ -691,6 +692,12 @@ svg.paths {
 .marker.alt {
   outline: 1.5px dashed var(--opt);
   outline-offset: 1px;
+}
+/* the option being shown: ringed, so it stands out without changing the cell's size */
+.marker.active {
+  box-shadow:
+    0 0 0 2px var(--bg),
+    0 0 0 3.5px var(--opt);
 }
 .cell.ghost {
   flex-basis: var(--ghost-w);
@@ -1082,15 +1089,19 @@ textarea.field-input {
 }
 
 /* legend above the box */
-.legend-bar {
+/* a small box under the grid, bottom right */
+.legend-box {
+  align-self: flex-end;
   display: flex;
-  flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2) var(--space-5);
+  gap: var(--space-3);
+  max-width: calc(100% - 2 * var(--space-5));
+  margin: var(--space-2) var(--space-5) var(--space-3);
+  padding: var(--space-1) var(--space-3);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg-chrome);
   font-family: var(--font-ui);
-  font-size: var(--fs-xs);
-  color: var(--ink-muted);
 }
 .legend {
   display: flex;
@@ -1914,6 +1925,12 @@ tr.drop-after > * {
   font-weight: 600;
   color: var(--ink);
 }
+/* the legend box sits under the grid, at the right */
+.print-section > .legend-box {
+  width: fit-content;
+  max-width: 100%;
+  margin: var(--space-2) 0 0 auto;
+}
 /* bands, legends and footnotes take the width of the grid instead of widening the section */
 .print-section > .note-band,
 .print-section > .print-legend,
@@ -2097,7 +2114,7 @@ __m["model.js"] = (() => {
 //     meta:     { title, scale: { min, max }, updated, extra: [[key, value], …] },
 //     problem:  '',                     // the problem statement, shown above the box
 //     dims:     [Dimension],            // the box: dimensions × parameters
-//     options:  [{ uid, id, title, note, extends, tags }],
+//     options:  [{ uid, id, title, note, extends, colour, tags }],
 //     criteria: [{ uid, id, title, note, weight, tags }],
 //     ratings:  { O1: { C1: { score, note, tags } } },
 //     passthrough: [line, …],           // the "# Notes" section, verbatim
@@ -2116,6 +2133,11 @@ __m["model.js"] = (() => {
 // picks; the link only groups it with the option it extends, so it is drawn in
 // that option's colour with a dashed (then dotted) line. `tags` keeps unknown
 // {…} tokens so they survive a round trip.
+//
+// Option ids follow the order of the options: O1 is the first. Every change to
+// the order renumbers them (renumberOptions), rewriting picks, ratings and
+// links. An option's colour (slot 1–8) is stored with it, so it stays the same
+// when the option is renumbered; an extension always has its family's colour.
 
 const FORMAT_VERSION = 2;
 const DEFAULT_SCALE = Object.freeze({ min: 1, max: 5 });
@@ -2168,7 +2190,7 @@ function createParameter(title = '', note = '') {
 }
 
 function createOption(id, title = '', note = '') {
-  return { uid: uid(), id, title, note, extends: null, tags: [] };
+  return { uid: uid(), id, title, note, extends: null, colour: id ? colourSlot(id) : null, tags: [] };
 }
 
 function createCriterion(id, title = '', note = '', weight = DEFAULT_WEIGHT) {
@@ -2190,7 +2212,7 @@ function nextId(items) {
   return max + 1;
 }
 
-/** Colour slot 1..8 from the numeric id; from O9 on the colours repeat. */
+/** The usual colour slot 1..8 for an option number; from O9 on the colours repeat. */
 function colourSlot(id) {
   return ((Math.max(1, id | 0) - 1) % OPTION_COLOURS) + 1;
 }
@@ -2353,11 +2375,37 @@ function baseChain(space, id) {
   return chain;
 }
 
+/** The option a chain of extensions starts from (the option itself if it extends nothing). */
+function rootOf(space, id) {
+  const chain = baseChain(space, id);
+  return chain.length ? chain[chain.length - 1] : findOption(space, id);
+}
+
 /** How an option is drawn: the colour of the option its chain starts from, and its depth (0 solid, 1 dashed, 2+ dotted). */
 function optionLook(space, id) {
-  const chain = baseChain(space, id);
-  const root = chain.length ? chain[chain.length - 1].id : id;
-  return { colour: colourSlot(root), depth: chain.length };
+  const root = rootOf(space, id);
+  return { colour: (root && root.colour) || colourSlot(id), depth: baseChain(space, id).length };
+}
+
+/**
+ * A colour for a new solution (an option that extends nothing): the least used
+ * among the solutions, preferring the usual colour of its number `id`.
+ */
+function freeColour(space, id, except = null) {
+  const used = new Array(OPTION_COLOURS + 1).fill(0);
+  for (const o of space.options) if (o !== except && o.extends === null && o.colour) used[o.colour] += 1;
+  const least = Math.min(...used.slice(1));
+  if (used[colourSlot(id)] === least) return colourSlot(id);
+  return used.findIndex((n, slot) => slot > 0 && n === least);
+}
+
+/** Gives every extension the colour of the option its chain starts from. */
+function syncColours(space) {
+  for (const o of space.options) {
+    if (o.extends === null) continue;
+    const root = rootOf(space, o.id);
+    if (root && root !== o) o.colour = root.colour;
+  }
 }
 
 /** Whether option `id` may extend option `baseId`: it exists, and the link makes no loop. */
@@ -2367,11 +2415,18 @@ function canExtend(space, id, baseId) {
   return !baseChain(space, baseId).some((o) => o.id === id);
 }
 
-/** Links option `id` to the option it extends (null unlinks). Returns false if the link is not allowed. */
+/**
+ * Links option `id` to the option it extends, taking its family's colour.
+ * Unlinking (null) makes it a solution of its own, with a colour of its own.
+ * Returns false if the link is not allowed.
+ */
 function setExtends(space, id, baseId) {
   const option = findOption(space, id);
   if (!option || !canExtend(space, id, baseId)) return false;
+  const wasLinked = option.extends !== null;
   option.extends = baseId;
+  if (baseId === null && wasLinked) option.colour = freeColour(space, id, option);
+  syncColours(space);
   return true;
 }
 
@@ -2405,20 +2460,50 @@ function extendOption(space, id) {
   if (!base) return null;
   const ext = createOption(nextId(items), extensionTitle(space, id));
   ext.extends = id;
+  ext.colour = rootOf(space, id).colour;
   const family = new Set([base, ...extensionsOf(space, id)]);
   let at = items.indexOf(base) + 1;
   while (at < items.length && family.has(items[at])) at += 1;
   items.splice(at, 0, ext);
   for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, ext.id);
+  renumberOptions(space);
   return ext;
 }
 
 // ---------------------------------------------------------------- options
 
+/**
+ * Renumbers the options to follow their order (O1 is the first), rewriting
+ * picks, ratings and links. Objects keep their identity, so a reference to an
+ * option sees its new id. Returns a Map old id -> new id of the ids that changed.
+ */
+function renumberOptions(space) {
+  const map = new Map();
+  space.options.forEach((o, i) => {
+    if (o.id !== i + 1) map.set(o.id, i + 1);
+  });
+  if (!map.size) return map;
+  const to = (id) => (map.has(id) ? map.get(id) : id);
+  for (const o of space.options) {
+    o.id = to(o.id);
+    if (o.extends !== null) o.extends = to(o.extends);
+  }
+  for (const p of allParameters(space)) p.picks = p.picks.map(to).sort((a, b) => a - b);
+  const ratings = {};
+  for (const [key, row] of Object.entries(space.ratings)) {
+    const m = /^O(\d+)$/.exec(key);
+    ratings[m ? optionKey(to(Number(m[1]))) : key] = row;
+  }
+  space.ratings = ratings;
+  return map;
+}
+
 function addOption(space, title = '', index = Infinity) {
   const items = space.options;
   const option = createOption(nextId(items), title);
+  option.colour = freeColour(space, option.id);
   items.splice(Math.min(index, items.length), 0, option);
+  renumberOptions(space);
   return option;
 }
 
@@ -2429,15 +2514,20 @@ function duplicateOption(space, id) {
   if (!source) return null;
   const copy = createOption(nextId(items), source.title, source.note);
   copy.extends = source.extends;
+  copy.colour = source.extends !== null ? source.colour : freeColour(space, copy.id);
   copy.tags = [...source.tags];
   items.splice(items.indexOf(source) + 1, 0, copy);
   for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, copy.id);
   const cells = space.ratings[optionKey(id)];
   if (cells) space.ratings[optionKey(copy.id)] = JSON.parse(JSON.stringify(cells));
+  renumberOptions(space);
   return copy;
 }
 
-/** Deletes an option with its picks and ratings. Its extensions become options of their own. */
+/**
+ * Deletes an option with its picks and ratings. Its extensions become options
+ * of their own and keep their family's colour.
+ */
 function removeOption(space, id) {
   const i = space.options.findIndex((o) => o.id === id);
   if (i < 0) return false;
@@ -2445,6 +2535,14 @@ function removeOption(space, id) {
   for (const o of space.options) if (o.extends === id) o.extends = null;
   for (const p of allParameters(space)) p.picks = p.picks.filter((x) => x !== id);
   delete space.ratings[optionKey(id)];
+  renumberOptions(space);
+  return true;
+}
+
+/** Moves the option at index `from` to `to` (index after removal) and renumbers. */
+function moveOption(space, from, to) {
+  if (!moveItem(space.options, from, to)) return false;
+  renumberOptions(space);
   return true;
 }
 
@@ -2579,7 +2677,7 @@ function scoreFraction(score, scale) {
   const span = scale.max - scale.min;
   return span > 0 ? Math.max(0, Math.min(1, (score - scale.min) / span)) : 0;
 }
-return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, colourSlot, rowLetter, coordinate, findNode, findOption, findCriterion, allParameters, addDimension, addParameter, removeNode, moveNode, moveParameter, nodeHasContent, toggleMark, isSelected, togglePick, optionProfile, looksDecided, baseChain, optionLook, canExtend, setExtends, extensionsOf, extensionTitle, extendOption, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
+return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, colourSlot, rowLetter, coordinate, findNode, findOption, findCriterion, allParameters, addDimension, addParameter, removeNode, moveNode, moveParameter, nodeHasContent, toggleMark, isSelected, togglePick, optionProfile, looksDecided, baseChain, rootOf, optionLook, freeColour, syncColours, canExtend, setExtends, extensionsOf, extensionTitle, extendOption, renumberOptions, addOption, duplicateOption, removeOption, moveOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
 })();
 
 // ---- format.js
@@ -2588,7 +2686,7 @@ __m["format.js"] = (() => {
 // Tolerant reader, canonical writer. The specification is docs/FORMAT.md.
 // Pure module: no DOM, importable in Node for tests.
 
-const { FORMAT_VERSION, DEFAULT_SCALE, MARKS, createSpace, createDimension, createParameter, createOption, createCriterion, clampWeight, canExtend, cleanTitle, optionKey, criterionKey } = __m["model.js"];
+const { FORMAT_VERSION, DEFAULT_SCALE, MARKS, createSpace, createDimension, createParameter, createOption, createCriterion, clampWeight, canExtend, colourSlot, syncColours, renumberOptions, OPTION_COLOURS, cleanTitle, optionKey, criterionKey } = __m["model.js"];
 
 const SECTIONS = ['problem', 'box', 'options', 'criteria', 'ratings', 'notes'];
 const SECTION_TITLES = {
@@ -2802,6 +2900,7 @@ function parseBody(lines, report) {
   const criterionRecs = [];
   const pickRefs = []; // { param, id, line }
   const extendRefs = []; // { option, id, line }
+  const colourRefs = new Map(); // option -> { colour, line }
   const ratingBlocks = [];
 
   const setTarget = (t) => {
@@ -2911,7 +3010,10 @@ function parseBody(lines, report) {
         for (const tok of tokens) {
           const w = /^w=(-?\d+)$/.exec(tok);
           const ext = /^extends=O(\d+)$/.exec(tok);
-          if (section === 'options' && ext) {
+          const colour = /^colour=(\d+)$/.exec(tok);
+          if (section === 'options' && colour && Number(colour[1]) >= 1 && Number(colour[1]) <= OPTION_COLOURS && !colourRefs.has(item)) {
+            colourRefs.set(item, { colour: Number(colour[1]), line: ln });
+          } else if (section === 'options' && ext) {
             if (extendRefs.some((r) => r.option === item)) add(ln, 'warning', `Option extends more than one option; "${tok}" dropped.`);
             else extendRefs.push({ option: item, id: Number(ext[1]), line: ln });
           } else if (section === 'criteria' && w) {
@@ -3080,6 +3182,14 @@ function parseBody(lines, report) {
     else ref.option.extends = ref.id;
   }
 
+  // ---- colours: as given, else the usual one for the number in the file; extensions take their family's
+  for (const o of space.options) o.colour = colourRefs.has(o) ? colourRefs.get(o).colour : colourSlot(o.id);
+  syncColours(space);
+  for (const [o, ref] of colourRefs) {
+    if (o.extends !== null && o.colour !== ref.colour)
+      add(ref.line, 'info', `O${o.id} extends O${o.extends}, so it has its family's colour; "colour=${ref.colour}" ignored.`);
+  }
+
   // ---- ratings
   const { min, max } = space.meta.scale;
   for (const block of ratingBlocks) {
@@ -3106,6 +3216,13 @@ function parseBody(lines, report) {
       if (row[ck]) add(e.line, 'warning', `Second rating for O${block.id} × C${e.cid}; the last one wins.`);
       row[ck] = { score, note, tags: e.tags };
     }
+  }
+
+  // ---- option ids follow the order of the options
+  const renumbered = renumberOptions(space);
+  if (renumbered.size) {
+    const list = [...renumbered].map(([from, to]) => `O${from} → O${to}`).join(', ');
+    add(optionRecs[0].line, 'info', `Options renumbered to follow their order: ${list}.`);
   }
 
   // ---- passthrough
@@ -3195,7 +3312,9 @@ function serialize(space) {
     heading('# Options');
     for (const o of space.options) {
       const ext = o.extends !== null && optionIds.has(o.extends) ? ['extends=O' + o.extends] : [];
-      heading(itemLine('## O' + o.id, o.title, [...ext, ...o.tags]));
+      // a solution's colour is written only when it is not the usual one for its number
+      const colour = !ext.length && o.colour && o.colour !== colourSlot(o.id) ? ['colour=' + o.colour] : [];
+      heading(itemLine('## O' + o.id, o.title, [...ext, ...colour, ...o.tags]));
       note(o.note, '');
     }
   }
@@ -3664,12 +3783,14 @@ function renderGrid(app) {
           cls.push('picked');
           style = optionVars(space, active);
         }
+        // every picking option gets a marker, the active one ringed, so a
+        // cell's size never depends on which option is shown
         for (const o of space.options) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
+          if (!p.picks.includes(o.id)) continue;
           markers.push(
             h(
               'span',
-              { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt'], style: optionVars(space, o.id), title: `O${o.id} ${o.title}` },
+              { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt', o.id === active && 'active'], style: optionVars(space, o.id), title: `O${o.id} ${o.title}` },
               String(o.id),
             ),
           );
@@ -4104,7 +4225,7 @@ __m["ui/options-bar.js"] = (() => {
 // compare toggle. An extension's chip names the option it extends.
 
 const { h, s } = __m["ui/dom.js"];
-const { addOption, moveItem } = __m["model.js"];
+const { addOption, moveOption } = __m["model.js"];
 const { optionVars, optionStyle } = __m["ui/grid.js"];
 
 /** A small colour swatch that also shows the option's line style (dashed or dotted for extensions). */
@@ -4185,7 +4306,7 @@ function renderOptionsBar(app) {
     let to = items.findIndex((o) => o.id === Number(chip.dataset.id)) + (e.clientX < r.left + r.width / 2 ? 0 : 1);
     if (from < to) to -= 1;
     dragId = null;
-    if (from !== to) app.change(() => moveItem(items, from, to));
+    if (from !== to) app.change(() => moveOption(space, from, to));
   });
   chips.addEventListener('dragend', () => {
     dragId = null;
@@ -4243,7 +4364,8 @@ return { swatch, extendsRef, renderOptionsBar };
 
 // ---- ui/legend.js
 __m["ui/legend.js"] = (() => {
-// Legend above the box: what rows, cells, marks, paths and line styles mean.
+// Legend: a small box under the box (the grid), bottom right, explaining
+// what is not self-evident: the marks, paths and extension line styles.
 
 const { h, s } = __m["ui/dom.js"];
 const { MARK_INFO, DASHES } = __m["ui/grid.js"];
@@ -4259,26 +4381,30 @@ function lineSample(dash) {
 
 /** The legend's entries (also used by the print view). */
 function legendItems() {
-  const mark = (m) =>
+  const mark = (m, text) =>
     h(
       'span',
-      { class: 'legend-item' },
+      { class: 'legend-item', title: `${MARK_INFO[m].label}: ${MARK_INFO[m].help}` },
       h('span', { class: ['legend-swatch', 'mark-' + m], 'aria-hidden': 'true' }, MARK_INFO[m].glyph),
       h('strong', null, MARK_INFO[m].label),
-      ' ' + MARK_INFO[m].help,
+      ' ' + text,
     );
   return [
-    h('span', { class: 'legend-item' }, h('strong', null, 'Rows'), ' dimensions'),
-    h('span', { class: 'legend-item' }, h('strong', null, 'Cells'), ' parameters, open unless marked'),
-    mark('fixed'),
-    mark('out'),
-    h('span', { class: 'legend-item' }, lineSample(DASHES[0]), h('strong', null, 'Paths'), ' options: what each one picks'),
-    h('span', { class: 'legend-item' }, lineSample(DASHES[1]), lineSample(DASHES[2]), h('strong', null, 'Extensions'), ' later versions of an option, in its colour'),
+    mark('fixed', 'already decided'),
+    mark('out', 'excluded'),
+    h('span', { class: 'legend-item', title: 'Each option is drawn as a path through what it picks' }, lineSample(DASHES[0]), h('strong', null, 'Option')),
+    h('span', { class: 'legend-item', title: 'Later versions of an option, drawn in its colour' }, lineSample(DASHES[1]), lineSample(DASHES[2]), h('strong', null, 'Extensions')),
   ];
 }
 
+/** The "Legend" box under the grid (also used by the print view). */
 function renderLegend() {
-  return h('div', { class: 'legend-bar' }, h('div', { class: 'legend', role: 'note', 'aria-label': 'Legend' }, legendItems()));
+  return h(
+    'aside',
+    { class: 'legend-box', 'aria-label': 'Legend' },
+    h('span', { class: 'bar-label' }, 'Legend'),
+    h('div', { class: 'legend' }, legendItems()),
+  );
 }
 return { legendItems, renderLegend };
 })();
@@ -5364,7 +5490,7 @@ const { optionVars, MARK_INFO } = __m["ui/grid.js"];
 const { drawPaths } = __m["ui/paths.js"];
 const { swatch, extendsRef } = __m["ui/options-bar.js"];
 const { displayOptions, renderProfiles, ordinal } = __m["ui/evaluation.js"];
-const { legendItems } = __m["ui/legend.js"];
+const { renderLegend } = __m["ui/legend.js"];
 
 // Landscape A4 or Letter with 12 mm margins is at least ~960 CSS px wide.
 const PAGE_WIDTH = 960;
@@ -5382,7 +5508,7 @@ function footnotes() {
       return h(
         'ol',
         { class: 'footnotes' },
-        list.map((f) => h('li', null, h('span', { class: 'fn-ref' }, f.ref), f.title ? h('span', { class: 'fn-title' }, f.title) : null, h('span', { class: 'fn-text' }, f.text))),
+        list.map((f) => h('li', null, f.ref ? h('span', { class: 'fn-ref' }, f.ref) : null, f.title ? h('span', { class: 'fn-title' }, f.title) : null, h('span', { class: 'fn-text' }, f.text))),
       );
     },
   };
@@ -5394,11 +5520,11 @@ function staticGrid(app, notes) {
   const grid = h('div', { class: 'grid' });
   space.dims.forEach((dim, r) => {
     const row = h('div', { class: 'row' });
-    const dn = dim.note ? notes.add(rowLetter(r), dim.title, dim.note) : 0;
+    const dn = dim.note ? notes.add(state.coords ? rowLetter(r) : '', dim.title, dim.note) : 0;
     row.append(h('div', { class: 'cell dim' }, h('span', { class: 'coord' }, rowLetter(r)), notes.mark(dn), h('div', { class: 'title' }, dim.title)));
     dim.params.forEach((p, c) => {
       const coord = coordinate(r, c);
-      const pn = p.note ? notes.add(coord, p.title, p.note) : 0;
+      const pn = p.note ? notes.add(state.coords ? coord : '', p.title, p.note) : 0;
       const cls = ['cell', 'param', p.mark && 'mark-' + p.mark];
       let style = null;
       const markers = [];
@@ -5408,8 +5534,8 @@ function staticGrid(app, notes) {
           style = optionVars(space, active);
         }
         for (const o of space.options) {
-          if (o.id === active || !p.picks.includes(o.id)) continue;
-          markers.push(h('span', { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt'], style: optionVars(space, o.id) }, String(o.id)));
+          if (!p.picks.includes(o.id)) continue;
+          markers.push(h('span', { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt', o.id === active && 'active'], style: optionVars(space, o.id) }, String(o.id)));
         }
       }
       const glyph = p.mark && MARK_INFO[p.mark].glyph;
@@ -5539,7 +5665,7 @@ function preparePrint(app) {
   if (space.problem || space.dims.length) {
     const notes = footnotes();
     boxCanvas = staticGrid(app, notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), h('div', { class: 'legend' }, legendItems()), optionLegend(app), boxCanvas, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), optionLegend(app), boxCanvas, renderLegend(), notes.render()));
   }
   const opts = displayOptions(app);
   if (opts.length || space.criteria.length) {
@@ -5577,7 +5703,7 @@ return { preparePrint, cleanupPrint };
 // ---- examples.js
 __m["examples.js"] = (() => {
 const EXAMPLES = {
-  "car-concept.zwicky.md": "---\nzwicky: 2\ntitle: Car Concept (demo)\nscale: 1-5\n---\n\n# Problem\n> Which new car concept should we bring to market next?\n\n# Box\n\n## Platform\n- Existing platform {fixed}\n  > Board decision: no new platform before the next model cycle.\n\n## Launch\n- Within three years {fixed}\n  > Set by the product committee.\n\n## Front design\n- aggressive\n- edgy (new edge)\n- slim\n- flowing\n- sporty\n- athletic {O1}\n\n## Drivetrain\n- Petrol 100–200 hp\n- Petrol 200–300 hp\n- Diesel {O3}\n- Hybrid {O1}\n- Hydrogen {out}\n  > No refuelling network in our core markets within the launch window.\n- Electric {O2 O4 O5}\n\n## Seats\n- 2\n- 4 {O2 O4}\n- 5 {O1 O5}\n- 6 {O3}\n- 6+ incl. sleeping berth\n\n## Body\n- Sedan\n- Minivan {O3}\n- SUV {O1}\n- Estate\n- Coupé {O2 O4 O5}\n- Pick-up {out}\n  > Not sold in volume in our core markets.\n\n## Character\n- proud {O1}\n- cool {O2 O4 O5}\n- friendly {O3}\n- cheeky\n- \"French\"\n- \"American\"\n\n## Marketing asset\n- Streaming partnership {O2 O4 O5}\n- Rail partnership for long distance {O1 O4 O5}\n  > Car for the last mile, train for the long haul.\n- New paint every year\n- Fridge and mini kitchen {O3}\n\n## Target group\n- HNWIs {out}\n  > High Net Worth Individuals. Covered by our sister brand.\n- DINKs {O2 O4 O5}\n  > Double Income, No Kids.\n- LOHAS {O1}\n  > Lifestyle Of Health And Sustainability.\n- WOOPIEs {O1 O5}\n  > Well-Off Older People.\n- Families {O3}\n- MILKIEs\n  > Modest Introverted Luxury Keepers.\n\n# Options\n\n## O1 Athletic hybrid SUV\n> The classic path through the box.\n\n## O2 City coupé\n\n## O4 City coupé with rail partnership {extends=O2}\n> Second step: car for the last mile, train for the long haul.\n\n## O5 Long-distance coupé {extends=O4}\n> Third step: five seats, and older couples as a second target group.\n\n## O3 Family hauler\n\n# Criteria\n\n## C1 Market size {w=3}\n> How many buyers does this reach in our core markets?\n\n## C2 Time to market {w=2}\n> How safely do we make the three-year launch on the existing platform?\n\n## C3 Brand fit\n> Does it feel like us?\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > Two target groups; assumes LOHAS and WOOPIEs overlap little.\n- C2: 3\n- C3: 5\n\n## O2 City coupé\n- C1: 3\n- C2: 4\n  > Reuses the existing EV drivetrain (assumption, to be confirmed).\n- C3: 3\n\n## O4 City coupé with rail partnership\n- C1: 4\n  > The rail partnership adds commuters who also travel long distances.\n- C2: 3\n- C3: 3\n\n## O5 Long-distance coupé\n- C1: 4\n- C2: 2\n  > Five seats need a longer body than the coupé has today.\n- C3: 3\n\n## O3 Family hauler\n- C1: 4\n- C2: 2\n  > Diesel minivan may need new emissions homologation.\n",
+  "car-concept.zwicky.md": "---\nzwicky: 2\ntitle: Car Concept (demo)\nscale: 1-5\n---\n\n# Problem\n> Which new car concept should we bring to market next?\n\n# Box\n\n## Platform\n- Existing platform {fixed}\n  > Board decision: no new platform before the next model cycle.\n\n## Launch\n- Within three years {fixed}\n  > Set by the product committee.\n\n## Front design\n- aggressive\n- edgy (new edge)\n- slim\n- flowing\n- sporty\n- athletic {O1}\n\n## Drivetrain\n- Petrol 100–200 hp\n- Petrol 200–300 hp\n- Diesel {O5}\n- Hybrid {O1}\n- Hydrogen {out}\n  > No refuelling network in our core markets within the launch window.\n- Electric {O2 O3 O4}\n\n## Seats\n- 2\n- 4 {O2 O3}\n- 5 {O1 O4}\n- 6 {O5}\n- 6+ incl. sleeping berth\n\n## Body\n- Sedan\n- Minivan {O5}\n- SUV {O1}\n- Estate\n- Coupé {O2 O3 O4}\n- Pick-up {out}\n  > Not sold in volume in our core markets.\n\n## Character\n- proud {O1}\n- cool {O2 O3 O4}\n- friendly {O5}\n- cheeky\n- \"French\"\n- \"American\"\n\n## Marketing asset\n- Streaming partnership {O2 O3 O4}\n- Rail partnership for long distance {O1 O3 O4}\n  > Car for the last mile, train for the long haul.\n- New paint every year\n- Fridge and mini kitchen {O5}\n\n## Target group\n- HNWIs {out}\n  > High Net Worth Individuals. Covered by our sister brand.\n- DINKs {O2 O3 O4}\n  > Double Income, No Kids.\n- LOHAS {O1}\n  > Lifestyle Of Health And Sustainability.\n- WOOPIEs {O1 O4}\n  > Well-Off Older People.\n- Families {O5}\n- MILKIEs\n  > Modest Introverted Luxury Keepers.\n\n# Options\n\n## O1 Athletic hybrid SUV\n> The classic path through the box.\n\n## O2 City coupé\n\n## O3 City coupé with rail partnership {extends=O2}\n> Second step: car for the last mile, train for the long haul.\n\n## O4 Long-distance coupé {extends=O3}\n> Third step: five seats, and older couples as a second target group.\n\n## O5 Family hauler\n\n# Criteria\n\n## C1 Market size {w=3}\n> How many buyers does this reach in our core markets?\n\n## C2 Time to market {w=2}\n> How safely do we make the three-year launch on the existing platform?\n\n## C3 Brand fit\n> Does it feel like us?\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > Two target groups; assumes LOHAS and WOOPIEs overlap little.\n- C2: 3\n- C3: 5\n\n## O2 City coupé\n- C1: 3\n- C2: 4\n  > Reuses the existing EV drivetrain (assumption, to be confirmed).\n- C3: 3\n\n## O3 City coupé with rail partnership\n- C1: 4\n  > The rail partnership adds commuters who also travel long distances.\n- C2: 3\n- C3: 3\n\n## O4 Long-distance coupé\n- C1: 4\n- C2: 2\n  > Five seats need a longer body than the coupé has today.\n- C3: 3\n\n## O5 Family hauler\n- C1: 4\n- C2: 2\n  > Diesel minivan may need new emissions homologation.\n",
   "slide-generator.zwicky.md": "---\nzwicky: 2\ntitle: Slide-Generator (intern)\nscale: 1-5\n---\n\n# Problem\n> Welchen internen Slide-Generator brauchen wir, damit Slides schneller und in unserem Styling entstehen?\n\n# Box\n\n## Hosting\n- Swiss Residency {fixed}\n  > Vorgabe Informationssicherheit: Daten bleiben in der Schweiz.\n\n## Präsentations-Art\n- Native PPTX {fixed}\n  > Kunden und Team arbeiten in PowerPoint weiter.\n\n## Umfang\n> Was soll der Generator erzeugen?\n- Einzelne Slides {O1}\n- Slide-Sequenz zu einem bestimmten Thema\n- Vollständige Präsentation {O2}\n- Überarbeitung einer bestehenden Präsentation\n- Erweiterung einer bestehenden Präsentation\n\n## Slide-Typen\n> Welche Art von Slides sollen erstellt werden können?\n- Mit Einschränkung › Strukturelle Slides {O1 O2}\n  > Nur Slides, für die vorgängig ein Template definiert wird: Cover, Agenda, Kapiteltrenner, Abschlussfolie.\n- Mit Einschränkung › Offerten-Slides {O2}\n  > Team, Kostenschätzung, Arbeitspakete, Zeitplan …\n- Mit Einschränkung › Consulting-Slides {O2}\n  > Empfehlungen, Entscheidungsfolien, Problem Statements, Ausgangslage & Zielsetzung …\n- Mit Einschränkung › Architektur-Slides\n  > Zielarchitektur …\n- Ohne Einschränkung\n  > Es sollen alle möglichen Slides generiert werden können.\n\n## Styling\n> Welches Styling soll für die Slides verwendet werden?\n- Acrea Styling {O1 O2}\n- Kunden-Styling {O2}\n- Neutrales Styling\n\n## Sprachen\n> Welche Sprache soll der Text auf den Slides haben?\n- Deutsch {O1 O2}\n- Englisch {O1 O2}\n\n## Quellen\n> Welche Informationen soll der Slide-Generator nutzen, um die Slides zu erstellen?\n- Prompt {O1 O2}\n- Bestehende PPT {O1}\n- Word {O2}\n- PDF {O2}\n- OneNote {out}\n  > Bei uns kaum im Einsatz; keine Anbindung geplant.\n- E-Mail\n- SharePoint-Dokumente {O2}\n\n## Umgang mit den Quellen\n> Wie soll der Slide-Generator mit den Quellen umgehen?\n- Zusammenfassen (keine Interpretation) {O1}\n- Interpretieren {O2}\n- Ergänzende Infos im Internet suchen und ergänzen {out}\n  > Ausgeschlossen: Inhalte sollen nur aus freigegebenen Quellen stammen.\n\n## Umgang mit Widersprüchen\n> Wie soll der Slide-Generator damit umgehen, wenn er widersprüchliche Informationen findet?\n- Auf dem Slide visuell hervorheben {O1}\n- Kommentar in der PPT erfassen\n  > Unklar, ob technisch möglich.\n- Notiz in den Speaker Notes {O2}\n  > Unklar, ob technisch möglich.\n\n## Interaktions-Ort\n> Wo soll mit dem Slide-Generator interagiert werden?\n- Copilot direkt in PowerPoint {O1}\n- Agent in der Copilot-App\n- Web-Anwendung im Browser {O2}\n\n## Interaktionsmodell\n> Wie soll mit dem Slide-Generator interagiert werden?\n- Prompt-basiert {O1}\n  > Ein Prompt, alle relevanten Informationen werden darin mitgegeben.\n- Geführter Assistant {O2}\n  > Relevante Informationen werden schrittweise gemeinsam mit dem Assistant erarbeitet.\n\n## Inhaltliche Aufgaben\n> Welche inhaltlichen Aufgaben übernimmt der Slide-Generator?\n- Storyline aus Quellen ableiten {O2}\n- Kernaussage pro Slide formulieren {O1 O2}\n- Argumentation auf Konsistenz prüfen {O2}\n\n# Options\n\n## O1 Copilot-Erweiterung für einzelne Slides\n> Klein starten: einzelne Slides direkt in PowerPoint, aus Prompt und bestehender PPT.\n\n## O2 Geführter Assistent im Browser\n> Ganze Präsentationen aus mehreren Quellen, Schritt für Schritt mit dem Assistant.\n"
 };
 return { EXAMPLES };
@@ -5585,7 +5711,7 @@ return { EXAMPLES };
 
 // ---- format-doc.js
 __m["format-doc.js"] = (() => {
-const FORMAT_DOC = "# The zwicky file format (`*.zwicky.md`), version 2\n\nA zwicky file holds one **space**: the **problem statement**, the **box** (a grid of *dimensions × parameters*, also called a morphological box or Zwicky box), the **options** composed from the box, the **criteria** they are rated against, and the **ratings**. It is plain Markdown, readable in any viewer and diffable in Git, with a small, strict structure that tools (and LLMs) can parse.\n\nThis document is the contract. The reference implementation is `src/js/format.js`, and it is kept in sync with this text. You can hand this file to an LLM and ask it to draft or edit a space.\n\n## Principles\n\n- Every file is valid CommonMark.\n- Structure is carried **only** by: the front matter, heading levels, list items, blockquote notes (`>`), and one trailing `{…}` tag group. Nothing else has meaning.\n- **Tolerant reader, canonical writer.** zwicky accepts small variations when it opens a file and always saves one canonical form. Saving an unchanged canonical file produces the same bytes (apart from `updated`).\n- Opening never fails on content. Problems are listed in an **import report** with line numbers. Lines that cannot be placed are kept in a `# Notes` section instead of being dropped.\n- Parameters belong to their dimension by position. Options and criteria have **stable ids** (`O1`, `C1`) used for all cross-references.\n\n## How a space is framed\n\nA workshop does not ask \"is this part of the problem or of the solution?\" but \"is this **open**, **fixed** or **out**?\". The frame of the problem lives in three places:\n\n1. **Goal:** the problem statement, a free-text note under `# Problem`.\n2. **Frame:** marks on the parameters of the box. A **fixed** parameter is already decided (e.g. \"Hosting: Swiss Residency\"); every option has it. An **out** parameter is excluded and cannot be picked. The parameter's note says why, and who decided.\n3. **Yardstick:** the criteria under `# Criteria`.\n\nEverything else in the box is **open**: options pick from it.\n\n## Example\n\n```markdown\n---\nzwicky: 2\ntitle: Car Concept\nscale: 1-5\nupdated: 2026-10-16\n---\n\n# Problem\n> The problem statement. Consecutive \"> \" lines form one multi-line note.\n\n# Box\n\n## Platform\n- Existing platform {fixed}\n  > Board decision: no new platform before the next model cycle.\n\n## Drivetrain\n> A dimension note.\n- Hybrid {O1}\n- Electric {O1 O2}\n  > A parameter note.\n- Hydrogen {out}\n  > No refuelling network in our core markets.\n- Diesel\n\n# Options\n\n## O1 Athletic hybrid SUV\n> An option note.\n\n## O2 City coupé\n\n## O3 City coupé with rail partnership {extends=O2}\n> A later extension of O2.\n\n# Criteria\n\n## C1 Market size {w=3}\n> What \"great\" looks like.\n\n## C2 Brand fit\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > The rationale or assumption behind this score.\n- C2: ?\n  > A note without a score yet.\n\n## O2 City coupé\n- C1: 3\n```\n\n## Grammar\n\n### Front matter\n\nThe file starts with a front matter block between two `---` lines. It is a strict subset of YAML: one `key: value` per line, no nesting, no quoting. The value is everything after the first `: `, trimmed.\n\n| Key | Meaning |\n|---|---|\n| `zwicky` | Format version. Required; currently `2`. |\n| `title` | Document title. |\n| `scale` | Rating scale `<min>-<max>`, non-negative integers, `min < max ≤ 100`. Default `1-5`. |\n| `updated` | ISO date (`YYYY-MM-DD`), set by zwicky on Save. |\n\nOther keys are kept, in their original order.\n\n### Sections\n\nTop-level `#` headings, in this order, each optional:\n\n| Section | Holds |\n|---|---|\n| `# Problem` | Only the **problem statement**, as a note directly under the heading. |\n| `# Box` | The dimensions of the box, with their parameters. |\n| `# Options` | One `## O<n> Title` heading per option. |\n| `# Criteria` | One `## C<n> Title {w=<weight>}` heading per criterion. |\n| `# Ratings` | One `## O<n> Title` block per option, with one line per rated criterion. |\n| `# Notes` | Free text, kept verbatim. Always last. |\n\nOnly `# Problem` takes a note under its heading.\n\n### Dimensions and parameters (Box)\n\n- A **dimension** is a `##` heading. Its title is a short buzzword.\n- A **parameter** is a list item `- Title` under its dimension. Rows can have different numbers of parameters.\n- A parameter is **open**, **fixed** or **out**:\n  - Open parameters list the options that **pick** them: `{O1 O3}`. An option picks 0..n parameters per dimension.\n  - `{fixed}`: already decided. Every option has this parameter; it is not listed as picks. A dimension can hold several fixed parameters (all of them hold), and options can still pick open parameters next to them.\n  - `{out}`: excluded. No option can pick it.\n- A dimension with a single open parameter is often a constraint in disguise: if its value is already decided, mark it `{fixed}`.\n\n### Options and criteria\n\n- Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers, assigned once (highest + 1) and never renumbered.\n- A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.\n- An option can **extend** another option: `## O3 City coupé with rail partnership {extends=O2}`. An extension is a later version of the same solution, e.g. version 1, then a first and a second extension (`O4 {extends=O3}`). It is a full option with its own picks; the link groups it with the option it extends. zwicky draws an extension in the colour of the option its chain starts from, with a dashed line (first extension) or a dotted line (second and later). An option extends at most one option, never itself, and links never form a loop.\n\n### Ratings\n\n- Under `# Ratings`, each `## O<n> Title` heading opens the ratings of one option. The **id is authoritative**; the title is informational and is rewritten with the current option title on save.\n- A rating line is `- C<n>: <score>`, with an integer score on the document's scale, or `- C<n>: ?` for a note without a score yet.\n- A missing line means *unrated*, which is not the same as a low score.\n\n### Notes\n\n- A note is one or more consecutive `>` lines directly after the heading or list item it belongs to.\n- Notes of list items are indented two spaces: `  > …`.\n- A bare `>` line is an empty line inside the note.\n- Notes are plain text. Line breaks are kept; Markdown inside notes is not rendered.\n\n### Titles\n\n- Titles are single-line. (Use notes for anything longer.)\n- Tags are a single `{…}` group at the **end** of a heading or list-item line, after whitespace, with space-separated tokens.\n- A title **never ends in a `{…}` group** (braces preceded by a space, or making up the whole title), because that is exactly what a tag group looks like. zwicky turns the braces of such a trailing group into parentheses: `Budget {in CHF}` becomes `Budget (in CHF)`. Braces anywhere else are fine: `Set {a, b} of tags`, `a{b}`. So the format needs no escaping.\n\n### Tags\n\n| Token | Where | Meaning |\n|---|---|---|\n| `fixed` | Parameters | Already decided; every option has it. |\n| `out` | Parameters | Excluded; cannot be picked. |\n| `O<n>` | Open parameters | Picked by option `O<n>`. |\n| `extends=O<n>` | Option headings | The option this one extends. |\n| `w=<int>` | Criterion headings | Weight 0–10. |\n\nAny other token is **kept** (and reported as unknown), so other tools can add their own.\n\n### Reserved: `###`\n\n`###` headings are reserved for **sub-dimensions** in a future version. zwicky reads a `###` inside a dimension by flattening it into its parent: each of its parameters gets the title prefix `<Sub-dimension title> › `, and its note is appended to the parent dimension's note as `<Sub-dimension title>: <note>`. This is lossy by design and reported as a warning. zwicky never writes `###`.\n\n```markdown\n## Slide-Typen\n* Ohne Einschränkung\n### Mit Einschränkung\n> Nur Slides mit vorgängig definiertem Template.\n* Strukturelle Slides\n* Offerten-Slides\n```\n\nis read as\n\n```markdown\n## Slide-Typen\n> Mit Einschränkung: Nur Slides mit vorgängig definiertem Template.\n- Ohne Einschränkung\n- Mit Einschränkung › Strukturelle Slides\n- Mit Einschränkung › Offerten-Slides\n```\n\n## Canonical form\n\nThis is exactly what zwicky writes:\n\n- UTF-8 without BOM, LF line endings, exactly one trailing newline, no trailing spaces.\n- Front matter keys in the order `zwicky`, `title`, `scale`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set.\n- A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.\n- Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.\n- List bullets are `- `.\n- Tag tokens: a parameter's mark (`fixed` or `out`) or its option ids sorted numerically, an option's `extends=O<n>`, a criterion's `w=<n>`; then unknown tokens in their original order. `{w=1}` is omitted.\n- Sections in the order Problem, Box, Options, Criteria, Ratings, Notes. Empty sections are omitted.\n- In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.\n- `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).\n\n## What the reader tolerates\n\nEach of these opens fine. Items marked † add a line to the import report.\n\n- A byte-order mark, CRLF or CR line endings, trailing spaces.\n- Extra or missing blank lines anywhere.\n- `*` and `+` bullets; list items and `>` notes at any indentation.\n- Missing sections, sections in any order, lower-case section names (`# box`).\n- No front matter (read as version 2) †; front matter without `zwicky` †; an invalid `scale` (falls back to `1-5`) †; duplicate keys (the last wins) †.\n- `## O1: Title` or `## O1. Title` as well as `## O1 Title`.\n- Option or criterion headings without an id: they get the next free id †.\n- Duplicate option or criterion ids: later duplicates get new ids †.\n- Picks or ratings referring to unknown options or criteria: dropped †.\n- Scores outside the scale: clamped †. Weights outside 0–10: clamped †. Scores that are not whole numbers: left unscored †.\n- Unknown tag tokens: kept †.\n- A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.\n- A parameter with both `fixed` and `out`: the first wins †. Picks on a fixed or out parameter: dropped †.\n- `extends` pointing to an unknown option, to the option itself or into a loop, or a second `extends` on one option: dropped †.\n- `###` sub-dimensions: flattened †.\n- A section repeated: merged †.\n- Headings or list items under `# Problem`, notes directly under other section headings, unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.\n- `- C1:` with nothing after the colon: same as `?`.\n\n## Versions\n\n`zwicky: 2` in the front matter is the format version. A file with another version is refused with a clear message instead of being misread. Version 1 (zwicky 1.x, with separate problem and solution grids) is not read.\n\n## Scoring (for reference)\n\nThe weighted score of an option is Σ weight × score ÷ Σ weight, over the criteria that are rated for that option and have weight > 0, shown with one decimal. Unrated criteria do not count as zero; they are counted separately. Options are ranked by the displayed score; equal scores share a rank (1, 1, 3).\n";
+const FORMAT_DOC = "# The zwicky file format (`*.zwicky.md`), version 2\n\nA zwicky file holds one **space**: the **problem statement**, the **box** (a grid of *dimensions × parameters*, also called a morphological box or Zwicky box), the **options** composed from the box, the **criteria** they are rated against, and the **ratings**. It is plain Markdown, readable in any viewer and diffable in Git, with a small, strict structure that tools (and LLMs) can parse.\n\nThis document is the contract. The reference implementation is `src/js/format.js`, and it is kept in sync with this text. You can hand this file to an LLM and ask it to draft or edit a space.\n\n## Principles\n\n- Every file is valid CommonMark.\n- Structure is carried **only** by: the front matter, heading levels, list items, blockquote notes (`>`), and one trailing `{…}` tag group. Nothing else has meaning.\n- **Tolerant reader, canonical writer.** zwicky accepts small variations when it opens a file and always saves one canonical form. Saving an unchanged canonical file produces the same bytes (apart from `updated`).\n- Opening never fails on content. Problems are listed in an **import report** with line numbers. Lines that cannot be placed are kept in a `# Notes` section instead of being dropped.\n- Parameters belong to their dimension by position. Options and criteria have **ids** (`O1`, `C1`) used for all cross-references. Option ids follow the order of the options; criterion ids never change.\n\n## How a space is framed\n\nA workshop does not ask \"is this part of the problem or of the solution?\" but \"is this **open**, **fixed** or **out**?\". The frame of the problem lives in three places:\n\n1. **Goal:** the problem statement, a free-text note under `# Problem`.\n2. **Frame:** marks on the parameters of the box. A **fixed** parameter is already decided (e.g. \"Hosting: Swiss Residency\"); every option has it. An **out** parameter is excluded and cannot be picked. The parameter's note says why, and who decided.\n3. **Yardstick:** the criteria under `# Criteria`.\n\nEverything else in the box is **open**: options pick from it.\n\n## Example\n\n```markdown\n---\nzwicky: 2\ntitle: Car Concept\nscale: 1-5\nupdated: 2026-10-16\n---\n\n# Problem\n> The problem statement. Consecutive \"> \" lines form one multi-line note.\n\n# Box\n\n## Platform\n- Existing platform {fixed}\n  > Board decision: no new platform before the next model cycle.\n\n## Drivetrain\n> A dimension note.\n- Hybrid {O1}\n- Electric {O1 O2}\n  > A parameter note.\n- Hydrogen {out}\n  > No refuelling network in our core markets.\n- Diesel\n\n# Options\n\n## O1 Athletic hybrid SUV\n> An option note.\n\n## O2 City coupé\n\n## O3 City coupé with rail partnership {extends=O2}\n> A later extension of O2.\n\n# Criteria\n\n## C1 Market size {w=3}\n> What \"great\" looks like.\n\n## C2 Brand fit\n\n# Ratings\n\n## O1 Athletic hybrid SUV\n- C1: 4\n  > The rationale or assumption behind this score.\n- C2: ?\n  > A note without a score yet.\n\n## O2 City coupé\n- C1: 3\n```\n\n## Grammar\n\n### Front matter\n\nThe file starts with a front matter block between two `---` lines. It is a strict subset of YAML: one `key: value` per line, no nesting, no quoting. The value is everything after the first `: `, trimmed.\n\n| Key | Meaning |\n|---|---|\n| `zwicky` | Format version. Required; currently `2`. |\n| `title` | Document title. |\n| `scale` | Rating scale `<min>-<max>`, non-negative integers, `min < max ≤ 100`. Default `1-5`. |\n| `updated` | ISO date (`YYYY-MM-DD`), set by zwicky on Save. |\n\nOther keys are kept, in their original order.\n\n### Sections\n\nTop-level `#` headings, in this order, each optional:\n\n| Section | Holds |\n|---|---|\n| `# Problem` | Only the **problem statement**, as a note directly under the heading. |\n| `# Box` | The dimensions of the box, with their parameters. |\n| `# Options` | One `## O<n> Title` heading per option. |\n| `# Criteria` | One `## C<n> Title {w=<weight>}` heading per criterion. |\n| `# Ratings` | One `## O<n> Title` block per option, with one line per rated criterion. |\n| `# Notes` | Free text, kept verbatim. Always last. |\n\nOnly `# Problem` takes a note under its heading.\n\n### Dimensions and parameters (Box)\n\n- A **dimension** is a `##` heading. Its title is a short buzzword.\n- A **parameter** is a list item `- Title` under its dimension. Rows can have different numbers of parameters.\n- A parameter is **open**, **fixed** or **out**:\n  - Open parameters list the options that **pick** them: `{O1 O3}`. An option picks 0..n parameters per dimension.\n  - `{fixed}`: already decided. Every option has this parameter; it is not listed as picks. A dimension can hold several fixed parameters (all of them hold), and options can still pick open parameters next to them.\n  - `{out}`: excluded. No option can pick it.\n- A dimension with a single open parameter is often a constraint in disguise: if its value is already decided, mark it `{fixed}`.\n\n### Options and criteria\n\n- Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers.\n- **Option ids follow the order of the options:** the first option is `O1`, the next `O2`, and so on. zwicky renumbers them whenever options are added, moved or deleted, and rewrites every pick, rating and `extends` that refers to them. Criterion ids are assigned once (highest + 1) and never renumbered.\n- Every option has a **colour** (one of 8), which stays with it when it is renumbered. By default it is the usual colour of its number (O1 colour 1 … O8 colour 8, then again from 1); otherwise the heading says so: `## O1 Family hauler {colour=5}`. An extension always has the colour of the option its chain starts from and carries no colour tag.\n- A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.\n- An option can **extend** another option: `## O3 City coupé with rail partnership {extends=O2}`. An extension is a later version of the same solution, e.g. version 1, then a first and a second extension (`O4 {extends=O3}`). It is a full option with its own picks; the link groups it with the option it extends. zwicky draws an extension in the colour of the option its chain starts from, with a dashed line (first extension) or a dotted line (second and later). An option extends at most one option, never itself, and links never form a loop.\n\n### Ratings\n\n- Under `# Ratings`, each `## O<n> Title` heading opens the ratings of one option. The **id is authoritative**; the title is informational and is rewritten with the current option title on save.\n- A rating line is `- C<n>: <score>`, with an integer score on the document's scale, or `- C<n>: ?` for a note without a score yet.\n- A missing line means *unrated*, which is not the same as a low score.\n\n### Notes\n\n- A note is one or more consecutive `>` lines directly after the heading or list item it belongs to.\n- Notes of list items are indented two spaces: `  > …`.\n- A bare `>` line is an empty line inside the note.\n- Notes are plain text. Line breaks are kept; Markdown inside notes is not rendered.\n\n### Titles\n\n- Titles are single-line. (Use notes for anything longer.)\n- Tags are a single `{…}` group at the **end** of a heading or list-item line, after whitespace, with space-separated tokens.\n- A title **never ends in a `{…}` group** (braces preceded by a space, or making up the whole title), because that is exactly what a tag group looks like. zwicky turns the braces of such a trailing group into parentheses: `Budget {in CHF}` becomes `Budget (in CHF)`. Braces anywhere else are fine: `Set {a, b} of tags`, `a{b}`. So the format needs no escaping.\n\n### Tags\n\n| Token | Where | Meaning |\n|---|---|---|\n| `fixed` | Parameters | Already decided; every option has it. |\n| `out` | Parameters | Excluded; cannot be picked. |\n| `O<n>` | Open parameters | Picked by option `O<n>`. |\n| `extends=O<n>` | Option headings | The option this one extends. |\n| `colour=<1–8>` | Option headings (not extensions) | The option's colour, when it is not the usual one for its number. |\n| `w=<int>` | Criterion headings | Weight 0–10. |\n\nAny other token is **kept** (and reported as unknown), so other tools can add their own.\n\n### Reserved: `###`\n\n`###` headings are reserved for **sub-dimensions** in a future version. zwicky reads a `###` inside a dimension by flattening it into its parent: each of its parameters gets the title prefix `<Sub-dimension title> › `, and its note is appended to the parent dimension's note as `<Sub-dimension title>: <note>`. This is lossy by design and reported as a warning. zwicky never writes `###`.\n\n```markdown\n## Slide-Typen\n* Ohne Einschränkung\n### Mit Einschränkung\n> Nur Slides mit vorgängig definiertem Template.\n* Strukturelle Slides\n* Offerten-Slides\n```\n\nis read as\n\n```markdown\n## Slide-Typen\n> Mit Einschränkung: Nur Slides mit vorgängig definiertem Template.\n- Ohne Einschränkung\n- Mit Einschränkung › Strukturelle Slides\n- Mit Einschränkung › Offerten-Slides\n```\n\n## Canonical form\n\nThis is exactly what zwicky writes:\n\n- UTF-8 without BOM, LF line endings, exactly one trailing newline, no trailing spaces.\n- Front matter keys in the order `zwicky`, `title`, `scale`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set.\n- A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.\n- Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.\n- List bullets are `- `.\n- Tag tokens: a parameter's mark (`fixed` or `out`) or its option ids sorted numerically, an option's `extends=O<n>` or `colour=<n>` (only when not the usual one), a criterion's `w=<n>`; then unknown tokens in their original order. `{w=1}` is omitted.\n- Sections in the order Problem, Box, Options, Criteria, Ratings, Notes. Empty sections are omitted.\n- In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.\n- `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).\n\n## What the reader tolerates\n\nEach of these opens fine. Items marked † add a line to the import report.\n\n- A byte-order mark, CRLF or CR line endings, trailing spaces.\n- Extra or missing blank lines anywhere.\n- `*` and `+` bullets; list items and `>` notes at any indentation.\n- Missing sections, sections in any order, lower-case section names (`# box`).\n- No front matter (read as version 2) †; front matter without `zwicky` †; an invalid `scale` (falls back to `1-5`) †; duplicate keys (the last wins) †.\n- `## O1: Title` or `## O1. Title` as well as `## O1 Title`.\n- Option or criterion headings without an id: they get the next free id †.\n- Duplicate option or criterion ids: later duplicates get new ids †.\n- Picks or ratings referring to unknown options or criteria: dropped †.\n- Scores outside the scale: clamped †. Weights outside 0–10: clamped †. Scores that are not whole numbers: left unscored †.\n- Unknown tag tokens: kept †.\n- A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.\n- A parameter with both `fixed` and `out`: the first wins †. Picks on a fixed or out parameter: dropped †.\n- `extends` pointing to an unknown option, to the option itself or into a loop, or a second `extends` on one option: dropped †.\n- Option ids that do not follow the order of the options (`O1`, `O4`, `O2`): renumbered, with every reference †.\n- A `colour` on an extension: ignored, it has its family's colour †. A colour outside 1–8: kept as an unknown tag †.\n- `###` sub-dimensions: flattened †.\n- A section repeated: merged †.\n- Headings or list items under `# Problem`, notes directly under other section headings, unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.\n- `- C1:` with nothing after the colon: same as `?`.\n\n## Versions\n\n`zwicky: 2` in the front matter is the format version. A file with another version is refused with a clear message instead of being misread. Version 1 (zwicky 1.x, with separate problem and solution grids) is not read.\n\n## Scoring (for reference)\n\nThe weighted score of an option is Σ weight × score ÷ Σ weight, over the criteria that are rated for that option and have weight > 0, shown with one decimal. Unrated criteria do not count as zero; they are counted separately. Options are ranked by the displayed score; equal scores share a rank (1, 1, 3).\n";
 return { FORMAT_DOC };
 })();
 
@@ -5642,7 +5768,7 @@ const app = {
     evalView: { sortByRank: false, showNotes: false, heatmap: false, ...(prefs.evalView || {}) },
     inspectorOpen: prefs.inspectorOpen !== false,
     density: DENSITIES.includes(prefs.density) ? prefs.density : 'normal',
-    coords: prefs.coords !== false,
+    coords: prefs.coords === true, // off unless turned on in View → Coordinates
     dirty: false,
     handle: null,
     fileName: '',
@@ -5673,10 +5799,39 @@ app.markDirty = () => {
 
 // ---------------------------------------------------------------- changes
 
+/** Option uid by id, to follow options through renumbering (see followOptions). */
+const optionUids = (space) => new Map(space.options.map((o) => [o.id, o.uid]));
+
+/**
+ * Options are renumbered whenever their order changes, so view state that
+ * names an option by id (active option, inspected option, selected rating)
+ * is moved to the option's new id, or cleared if the option is gone.
+ */
+function followOptions(before) {
+  const { state, space } = app;
+  const now = new Map(space.options.map((o) => [o.uid, o.id]));
+  const to = (id) => (before.has(id) && now.has(before.get(id)) ? now.get(before.get(id)) : null);
+  if (state.activeOption !== null) {
+    state.activeOption = to(state.activeOption);
+    if (state.activeOption === null) state.pickMode = false;
+  }
+  for (const tab of Object.keys(state.inspect)) {
+    const insp = state.inspect[tab];
+    if (insp && insp.type === 'option') state.inspect[tab] = to(insp.id) === null ? null : { type: 'option', id: to(insp.id) };
+  }
+  const cur = state.cursor.evaluation;
+  if (cur && cur.type === 'rating') {
+    const [cid, oid] = cur.uid.split(':').map(Number);
+    state.cursor.evaluation = to(oid) === null ? null : { type: 'rating', uid: `${cid}:${to(oid)}` };
+  }
+}
+
 /** Records an undo step, applies `fn`, marks the document dirty and re-renders. */
 app.change = (fn) => {
   app.history.record(app.space);
+  const before = optionUids(app.space);
   const result = fn();
+  followOptions(before);
   app.markDirty();
   app.render();
   return result;
@@ -5698,14 +5853,18 @@ function afterRestore() {
 app.undo = () => {
   const prev = app.history.undo(app.space);
   if (!prev) return;
+  const before = optionUids(app.space);
   app.space = prev;
+  followOptions(before);
   afterRestore();
 };
 
 app.redo = () => {
   const next = app.history.redo(app.space);
   if (!next) return;
+  const before = optionUids(app.space);
   app.space = next;
+  followOptions(before);
   afterRestore();
 };
 
@@ -6048,7 +6207,6 @@ function renderMain() {
     if (tab === 'box') {
       els.head.append(problemBand());
       els.head.append(renderOptionsBar(app));
-      els.head.append(renderLegend());
     }
     if (tab === 'evaluation') els.head.append(renderEvalHead(app));
   }
@@ -6062,7 +6220,7 @@ function renderMain() {
     if (state.editing && state.editing.section !== tab) state.editing = null;
     const { el, focusEl } = renderGrid(app);
     const scroller = h('div', { class: 'grid-scroll', dataset: { tab } }, el);
-    els.body.append(scroller);
+    els.body.append(scroller, renderLegend());
     const [sl, st] = state.scroll[tab] || [0, 0];
     scroller.scrollLeft = sl;
     scroller.scrollTop = st;

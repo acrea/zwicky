@@ -10,7 +10,7 @@ This document is the contract. The reference implementation is `src/js/format.js
 - Structure is carried **only** by: the front matter, heading levels, list items, blockquote notes (`>`), and one trailing `{…}` tag group. Nothing else has meaning.
 - **Tolerant reader, canonical writer.** zwicky accepts small variations when it opens a file and always saves one canonical form. Saving an unchanged canonical file produces the same bytes (apart from `updated`).
 - Opening never fails on content. Problems are listed in an **import report** with line numbers. Lines that cannot be placed are kept in a `# Notes` section instead of being dropped.
-- Parameters belong to their dimension by position. Options and criteria have **stable ids** (`O1`, `C1`) used for all cross-references.
+- Parameters belong to their dimension by position. Options and criteria have **ids** (`O1`, `C1`) used for all cross-references. Option ids follow the order of the options; criterion ids never change.
 
 ## How a space is framed
 
@@ -121,7 +121,9 @@ Only `# Problem` takes a note under its heading.
 
 ### Options and criteria
 
-- Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers, assigned once (highest + 1) and never renumbered.
+- Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers.
+- **Option ids follow the order of the options:** the first option is `O1`, the next `O2`, and so on. zwicky renumbers them whenever options are added, moved or deleted, and rewrites every pick, rating and `extends` that refers to them. Criterion ids are assigned once (highest + 1) and never renumbered.
+- Every option has a **colour** (one of 8), which stays with it when it is renumbered. By default it is the usual colour of its number (O1 colour 1 … O8 colour 8, then again from 1); otherwise the heading says so: `## O1 Family hauler {colour=5}`. An extension always has the colour of the option its chain starts from and carries no colour tag.
 - A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.
 - An option can **extend** another option: `## O3 City coupé with rail partnership {extends=O2}`. An extension is a later version of the same solution, e.g. version 1, then a first and a second extension (`O4 {extends=O3}`). It is a full option with its own picks; the link groups it with the option it extends. zwicky draws an extension in the colour of the option its chain starts from, with a dashed line (first extension) or a dotted line (second and later). An option extends at most one option, never itself, and links never form a loop.
 
@@ -152,6 +154,7 @@ Only `# Problem` takes a note under its heading.
 | `out` | Parameters | Excluded; cannot be picked. |
 | `O<n>` | Open parameters | Picked by option `O<n>`. |
 | `extends=O<n>` | Option headings | The option this one extends. |
+| `colour=<1–8>` | Option headings (not extensions) | The option's colour, when it is not the usual one for its number. |
 | `w=<int>` | Criterion headings | Weight 0–10. |
 
 Any other token is **kept** (and reported as unknown), so other tools can add their own.
@@ -188,7 +191,7 @@ This is exactly what zwicky writes:
 - A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.
 - Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.
 - List bullets are `- `.
-- Tag tokens: a parameter's mark (`fixed` or `out`) or its option ids sorted numerically, an option's `extends=O<n>`, a criterion's `w=<n>`; then unknown tokens in their original order. `{w=1}` is omitted.
+- Tag tokens: a parameter's mark (`fixed` or `out`) or its option ids sorted numerically, an option's `extends=O<n>` or `colour=<n>` (only when not the usual one), a criterion's `w=<n>`; then unknown tokens in their original order. `{w=1}` is omitted.
 - Sections in the order Problem, Box, Options, Criteria, Ratings, Notes. Empty sections are omitted.
 - In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.
 - `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).
@@ -211,6 +214,8 @@ Each of these opens fine. Items marked † add a line to the import report.
 - A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.
 - A parameter with both `fixed` and `out`: the first wins †. Picks on a fixed or out parameter: dropped †.
 - `extends` pointing to an unknown option, to the option itself or into a loop, or a second `extends` on one option: dropped †.
+- Option ids that do not follow the order of the options (`O1`, `O4`, `O2`): renumbered, with every reference †.
+- A `colour` on an extension: ignored, it has its family's colour †. A colour outside 1–8: kept as an unknown tag †.
 - `###` sub-dimensions: flattened †.
 - A section repeated: merged †.
 - Headings or list items under `# Problem`, notes directly under other section headings, unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.

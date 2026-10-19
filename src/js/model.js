@@ -7,7 +7,7 @@
 //     meta:     { title, scale: { min, max }, updated, extra: [[key, value], …] },
 //     problem:  '',                     // the problem statement, shown above the box
 //     dims:     [Dimension],            // the box: dimensions × parameters
-//     options:  [{ uid, id, title, note, extends, tags }],
+//     options:  [{ uid, id, title, note, extends, colour, tags }],
 //     criteria: [{ uid, id, title, note, weight, tags }],
 //     ratings:  { O1: { C1: { score, note, tags } } },
 //     passthrough: [line, …],           // the "# Notes" section, verbatim
@@ -26,6 +26,11 @@
 // picks; the link only groups it with the option it extends, so it is drawn in
 // that option's colour with a dashed (then dotted) line. `tags` keeps unknown
 // {…} tokens so they survive a round trip.
+//
+// Option ids follow the order of the options: O1 is the first. Every change to
+// the order renumbers them (renumberOptions), rewriting picks, ratings and
+// links. An option's colour (slot 1–8) is stored with it, so it stays the same
+// when the option is renumbered; an extension always has its family's colour.
 
 export const FORMAT_VERSION = 2;
 export const DEFAULT_SCALE = Object.freeze({ min: 1, max: 5 });
@@ -78,7 +83,7 @@ export function createParameter(title = '', note = '') {
 }
 
 export function createOption(id, title = '', note = '') {
-  return { uid: uid(), id, title, note, extends: null, tags: [] };
+  return { uid: uid(), id, title, note, extends: null, colour: id ? colourSlot(id) : null, tags: [] };
 }
 
 export function createCriterion(id, title = '', note = '', weight = DEFAULT_WEIGHT) {
@@ -100,7 +105,7 @@ export function nextId(items) {
   return max + 1;
 }
 
-/** Colour slot 1..8 from the numeric id; from O9 on the colours repeat. */
+/** The usual colour slot 1..8 for an option number; from O9 on the colours repeat. */
 export function colourSlot(id) {
   return ((Math.max(1, id | 0) - 1) % OPTION_COLOURS) + 1;
 }
@@ -263,11 +268,37 @@ export function baseChain(space, id) {
   return chain;
 }
 
+/** The option a chain of extensions starts from (the option itself if it extends nothing). */
+export function rootOf(space, id) {
+  const chain = baseChain(space, id);
+  return chain.length ? chain[chain.length - 1] : findOption(space, id);
+}
+
 /** How an option is drawn: the colour of the option its chain starts from, and its depth (0 solid, 1 dashed, 2+ dotted). */
 export function optionLook(space, id) {
-  const chain = baseChain(space, id);
-  const root = chain.length ? chain[chain.length - 1].id : id;
-  return { colour: colourSlot(root), depth: chain.length };
+  const root = rootOf(space, id);
+  return { colour: (root && root.colour) || colourSlot(id), depth: baseChain(space, id).length };
+}
+
+/**
+ * A colour for a new solution (an option that extends nothing): the least used
+ * among the solutions, preferring the usual colour of its number `id`.
+ */
+export function freeColour(space, id, except = null) {
+  const used = new Array(OPTION_COLOURS + 1).fill(0);
+  for (const o of space.options) if (o !== except && o.extends === null && o.colour) used[o.colour] += 1;
+  const least = Math.min(...used.slice(1));
+  if (used[colourSlot(id)] === least) return colourSlot(id);
+  return used.findIndex((n, slot) => slot > 0 && n === least);
+}
+
+/** Gives every extension the colour of the option its chain starts from. */
+export function syncColours(space) {
+  for (const o of space.options) {
+    if (o.extends === null) continue;
+    const root = rootOf(space, o.id);
+    if (root && root !== o) o.colour = root.colour;
+  }
 }
 
 /** Whether option `id` may extend option `baseId`: it exists, and the link makes no loop. */
@@ -277,11 +308,18 @@ export function canExtend(space, id, baseId) {
   return !baseChain(space, baseId).some((o) => o.id === id);
 }
 
-/** Links option `id` to the option it extends (null unlinks). Returns false if the link is not allowed. */
+/**
+ * Links option `id` to the option it extends, taking its family's colour.
+ * Unlinking (null) makes it a solution of its own, with a colour of its own.
+ * Returns false if the link is not allowed.
+ */
 export function setExtends(space, id, baseId) {
   const option = findOption(space, id);
   if (!option || !canExtend(space, id, baseId)) return false;
+  const wasLinked = option.extends !== null;
   option.extends = baseId;
+  if (baseId === null && wasLinked) option.colour = freeColour(space, id, option);
+  syncColours(space);
   return true;
 }
 
@@ -315,20 +353,50 @@ export function extendOption(space, id) {
   if (!base) return null;
   const ext = createOption(nextId(items), extensionTitle(space, id));
   ext.extends = id;
+  ext.colour = rootOf(space, id).colour;
   const family = new Set([base, ...extensionsOf(space, id)]);
   let at = items.indexOf(base) + 1;
   while (at < items.length && family.has(items[at])) at += 1;
   items.splice(at, 0, ext);
   for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, ext.id);
+  renumberOptions(space);
   return ext;
 }
 
 // ---------------------------------------------------------------- options
 
+/**
+ * Renumbers the options to follow their order (O1 is the first), rewriting
+ * picks, ratings and links. Objects keep their identity, so a reference to an
+ * option sees its new id. Returns a Map old id -> new id of the ids that changed.
+ */
+export function renumberOptions(space) {
+  const map = new Map();
+  space.options.forEach((o, i) => {
+    if (o.id !== i + 1) map.set(o.id, i + 1);
+  });
+  if (!map.size) return map;
+  const to = (id) => (map.has(id) ? map.get(id) : id);
+  for (const o of space.options) {
+    o.id = to(o.id);
+    if (o.extends !== null) o.extends = to(o.extends);
+  }
+  for (const p of allParameters(space)) p.picks = p.picks.map(to).sort((a, b) => a - b);
+  const ratings = {};
+  for (const [key, row] of Object.entries(space.ratings)) {
+    const m = /^O(\d+)$/.exec(key);
+    ratings[m ? optionKey(to(Number(m[1]))) : key] = row;
+  }
+  space.ratings = ratings;
+  return map;
+}
+
 export function addOption(space, title = '', index = Infinity) {
   const items = space.options;
   const option = createOption(nextId(items), title);
+  option.colour = freeColour(space, option.id);
   items.splice(Math.min(index, items.length), 0, option);
+  renumberOptions(space);
   return option;
 }
 
@@ -339,15 +407,20 @@ export function duplicateOption(space, id) {
   if (!source) return null;
   const copy = createOption(nextId(items), source.title, source.note);
   copy.extends = source.extends;
+  copy.colour = source.extends !== null ? source.colour : freeColour(space, copy.id);
   copy.tags = [...source.tags];
   items.splice(items.indexOf(source) + 1, 0, copy);
   for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, copy.id);
   const cells = space.ratings[optionKey(id)];
   if (cells) space.ratings[optionKey(copy.id)] = JSON.parse(JSON.stringify(cells));
+  renumberOptions(space);
   return copy;
 }
 
-/** Deletes an option with its picks and ratings. Its extensions become options of their own. */
+/**
+ * Deletes an option with its picks and ratings. Its extensions become options
+ * of their own and keep their family's colour.
+ */
 export function removeOption(space, id) {
   const i = space.options.findIndex((o) => o.id === id);
   if (i < 0) return false;
@@ -355,6 +428,14 @@ export function removeOption(space, id) {
   for (const o of space.options) if (o.extends === id) o.extends = null;
   for (const p of allParameters(space)) p.picks = p.picks.filter((x) => x !== id);
   delete space.ratings[optionKey(id)];
+  renumberOptions(space);
+  return true;
+}
+
+/** Moves the option at index `from` to `to` (index after removal) and renumbers. */
+export function moveOption(space, from, to) {
+  if (!moveItem(space.options, from, to)) return false;
+  renumberOptions(space);
   return true;
 }
 
