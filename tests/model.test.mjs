@@ -382,7 +382,7 @@ test('extending an option starts a new option with its picks, after its existing
   const ext = extendOption(s, 2);
   assert.equal(ext.id, 6);
   assert.equal(ext.extends, 2);
-  assert.equal(ext.title, '');
+  assert.equal(ext.title, 'City coupé (extended)');
   assert.deepEqual(s.options.map((o) => o.id), [1, 2, 4, 5, 6, 3]);
   assert.deepEqual(
     optionProfile(s, 6).map((r) => r.params.map((p) => p.title)),
@@ -393,4 +393,17 @@ test('extending an option starts a new option with its picks, after its existing
   assert.deepEqual(s.options.map((o) => o.id), [1, 7, 2, 4, 5, 6, 3]);
   assert.equal(ext2.extends, 1);
   assert.equal(extendOption(s, 99), null);
+});
+
+test('an extension is titled after the option it extends, with its depth from the second step on', () => {
+  const s = car();
+  assert.equal(extendOption(s, 1).title, 'Athletic hybrid SUV (extended)');
+  assert.equal(extendOption(s, 4).title, 'City coupé with rail partnership (extended 2)');
+  const first = extendOption(s, 2);
+  assert.equal(first.title, 'City coupé (extended)');
+  const second = extendOption(s, first.id);
+  assert.equal(second.title, 'City coupé (extended 2)', 'not "(extended) (extended)"');
+  assert.equal(extendOption(s, second.id).title, 'City coupé (extended 3)');
+  s.options.find((o) => o.id === 3).title = '';
+  assert.equal(extendOption(s, 3).title, '(extended)');
 });

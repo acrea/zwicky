@@ -437,9 +437,10 @@ await check('Extend starts a linked option with the same picks, in pick mode; th
   assert.deepEqual(s.options.map((o) => o.id), [1, 7, 2, 4, 5, 3, 6], 'placed right after O1');
   assert.ok(param(s, 'athletic').picks.includes(7), 'starts with the picks of O1');
   assert.equal(await page.locator('.pick-hint').count(), 1, 'pick mode is on');
-  await page.keyboard.type('SUV, second generation');
-  await page.keyboard.press('Enter');
-  assert.match(await md(), /\n## O7 SUV, second generation \{extends=O1\}\n/);
+  assert.equal(ext.title, 'Athletic hybrid SUV (extended)');
+  assert.equal(await page.inputValue('#inspector-title'), 'Athletic hybrid SUV (extended)');
+  assert.notEqual(await z(() => document.activeElement.id), 'inspector-title', 'the title is not focused, so typing does not overwrite it');
+  assert.match(await md(), /\n## O7 Athletic hybrid SUV \(extended\) \{extends=O1\}\n/);
   assert.match(await chip(7).innerText(), /↳ O1/);
   await page.keyboard.press('Escape');
 });

@@ -266,8 +266,8 @@ function optionInspector(app, option) {
             let ext;
             app.change(() => (ext = extendOption(space, option.id)));
             app.activateOption(ext.id, true);
-            app.inspectOption(ext.id, { focusTitle: true });
-            app.toast(`O${ext.id} extends O${option.id}. Change its picks, then name it.`);
+            app.inspectOption(ext.id);
+            app.toast(`O${ext.id} extends O${option.id}. Click parameters to change its picks.`);
           },
         },
         'Extend',

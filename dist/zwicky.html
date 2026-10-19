@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-gks+BKF0HS9tk32R+drB+8BmlMDMfSrU00DsikJN5iE='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-4lfPOEpUIzGuRHLIlW49SjaH0hHfpHys02I/SGBjHkw='; style-src 'unsafe-inline'; font-src data:; img-src data:; connect-src 'none'; base-uri 'none'; form-action 'none'" />
     <title>zwicky.</title>
     <meta name="description" content="State the problem, span a morphological box, mark what is fixed or out, compose options and rate them against criteria. Runs entirely in your browser." />
     <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23111'/%3E%3Ctext x='7' y='24' font-family='Georgia,serif' font-weight='700' font-size='22' fill='%23fff'%3Ez%3C/text%3E%3Ccircle cx='25' cy='22' r='2.6' fill='%231A8C9E'/%3E%3C/svg%3E" />
@@ -2380,15 +2380,30 @@ function extensionsOf(space, id) {
   return space.options.filter((o) => baseChain(space, o.id).some((b) => b.id === id));
 }
 
+const EXTENDED_RE = /\s*\(extended(?: \d+)?\)$/;
+
+/**
+ * The title of a new extension: the title of the option it extends, marked
+ * "(extended)", or "(extended 2)", "(extended 3)" further down the chain.
+ */
+function extensionTitle(space, baseId) {
+  const base = findOption(space, baseId);
+  const depth = baseChain(space, baseId).length + 1;
+  const plain = (base ? base.title : '').replace(EXTENDED_RE, '').trim();
+  const mark = depth === 1 ? '(extended)' : `(extended ${depth})`;
+  return plain ? `${plain} ${mark}` : mark;
+}
+
 /**
  * Starts an extension of option `id`: a new option that extends it, with the
- * same picks, placed after the option and its existing extensions.
+ * same picks and the title "<title> (extended)", placed after the option and
+ * its existing extensions.
  */
 function extendOption(space, id) {
   const items = space.options;
   const base = findOption(space, id);
   if (!base) return null;
-  const ext = createOption(nextId(items), '');
+  const ext = createOption(nextId(items), extensionTitle(space, id));
   ext.extends = id;
   const family = new Set([base, ...extensionsOf(space, id)]);
   let at = items.indexOf(base) + 1;
@@ -2564,7 +2579,7 @@ function scoreFraction(score, scale) {
   const span = scale.max - scale.min;
   return span > 0 ? Math.max(0, Math.min(1, (score - scale.min) / span)) : 0;
 }
-return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, colourSlot, rowLetter, coordinate, findNode, findOption, findCriterion, allParameters, addDimension, addParameter, removeNode, moveNode, moveParameter, nodeHasContent, toggleMark, isSelected, togglePick, optionProfile, looksDecided, baseChain, optionLook, canExtend, setExtends, extensionsOf, extendOption, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
+return { FORMAT_VERSION, DEFAULT_SCALE, WEIGHT_MIN, WEIGHT_MAX, DEFAULT_WEIGHT, OPTION_COLOURS, MARKS, uid, cleanTitle, createSpace, createDimension, createParameter, createOption, createCriterion, clone, optionKey, criterionKey, nextId, colourSlot, rowLetter, coordinate, findNode, findOption, findCriterion, allParameters, addDimension, addParameter, removeNode, moveNode, moveParameter, nodeHasContent, toggleMark, isSelected, togglePick, optionProfile, looksDecided, baseChain, optionLook, canExtend, setExtends, extensionsOf, extensionTitle, extendOption, addOption, duplicateOption, removeOption, moveItem, addCriterion, removeCriterion, clampWeight, clampScore, getRating, setRating, clampAllScores, round1, scoreOption, rankOptions, scoreFraction };
 })();
 
 // ---- format.js
@@ -4553,8 +4568,8 @@ function optionInspector(app, option) {
             let ext;
             app.change(() => (ext = extendOption(space, option.id)));
             app.activateOption(ext.id, true);
-            app.inspectOption(ext.id, { focusTitle: true });
-            app.toast(`O${ext.id} extends O${option.id}. Change its picks, then name it.`);
+            app.inspectOption(ext.id);
+            app.toast(`O${ext.id} extends O${option.id}. Click parameters to change its picks.`);
           },
         },
         'Extend',

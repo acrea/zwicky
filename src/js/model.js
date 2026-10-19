@@ -290,15 +290,30 @@ export function extensionsOf(space, id) {
   return space.options.filter((o) => baseChain(space, o.id).some((b) => b.id === id));
 }
 
+const EXTENDED_RE = /\s*\(extended(?: \d+)?\)$/;
+
+/**
+ * The title of a new extension: the title of the option it extends, marked
+ * "(extended)", or "(extended 2)", "(extended 3)" further down the chain.
+ */
+export function extensionTitle(space, baseId) {
+  const base = findOption(space, baseId);
+  const depth = baseChain(space, baseId).length + 1;
+  const plain = (base ? base.title : '').replace(EXTENDED_RE, '').trim();
+  const mark = depth === 1 ? '(extended)' : `(extended ${depth})`;
+  return plain ? `${plain} ${mark}` : mark;
+}
+
 /**
  * Starts an extension of option `id`: a new option that extends it, with the
- * same picks, placed after the option and its existing extensions.
+ * same picks and the title "<title> (extended)", placed after the option and
+ * its existing extensions.
  */
 export function extendOption(space, id) {
   const items = space.options;
   const base = findOption(space, id);
   if (!base) return null;
-  const ext = createOption(nextId(items), '');
+  const ext = createOption(nextId(items), extensionTitle(space, id));
   ext.extends = id;
   const family = new Set([base, ...extensionsOf(space, id)]);
   let at = items.indexOf(base) + 1;
