@@ -118,6 +118,18 @@ scale: 1-5
   > Reuses the existing EV drivetrain (assumption, to be confirmed).
 - C3: 3
 
+## O4 City coupé with rail partnership
+- C1: 4
+  > The rail partnership adds commuters who also travel long distances.
+- C2: 3
+- C3: 3
+
+## O5 Long-distance coupé
+- C1: 4
+- C2: 2
+  > Five seats need a longer body than the coupé has today.
+- C3: 3
+
 ## O3 Family hauler
 - C1: 4
 - C2: 2

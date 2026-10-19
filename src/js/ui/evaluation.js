@@ -14,10 +14,10 @@ import {
   optionProfile,
   clampWeight,
   criterionKey,
+  isSelected,
 } from '../model.js';
 import { optionVars, selKey, NAV_KEYS } from './grid.js';
-import { swatch } from './options-bar.js';
-import { stagePill, optionBeyondScope, scopeFilter } from './legend.js';
+import { swatch, extendsRef } from './options-bar.js';
 import { field } from './inspector.js';
 
 // ---------------------------------------------------------------- helpers
@@ -79,7 +79,6 @@ export function renderEvalHead(app) {
     toggle('sortByRank', 'Sort options by rank', 'Order the columns by rank. The stored order does not change.'),
     toggle('showNotes', 'Show all notes', 'Show every rating note under its score, for reviews and printing'),
     toggle('heatmap', 'Heatmap', 'Tint scores by value'),
-    scopeFilter(app),
   );
 }
 
@@ -87,14 +86,14 @@ function optionHead(app, o, extra) {
   return h(
     'th',
     {
-      class: ['opt-head', optionBeyondScope(app, o) && 'beyond-scope'],
+      class: 'opt-head',
       scope: 'col',
-      style: optionVars(o.id),
+      style: optionVars(app.space, o.id),
       title: o.note || null,
       dataset: { option: String(o.id) },
     },
-    h('button', { class: 'opt-head-btn', onclick: () => app.inspectOption(o.id) }, swatch(o.id, app.state.lineStyles), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: ['opt-title', !o.title && 'empty'] }, o.title || 'Untitled')),
-    stagePill(app.space, o.stage),
+    h('button', { class: 'opt-head-btn', onclick: () => app.inspectOption(o.id) }, swatch(app.space, o.id), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: ['opt-title', !o.title && 'empty'] }, o.title || 'Untitled')),
+    extendsRef(o),
     extra,
   );
 }
@@ -117,7 +116,10 @@ export function renderProfiles(app, opts) {
         h('th', { class: 'sticky row-head', scope: 'row' }, dim.title || 'Untitled dimension'),
         opts.map((o) => {
           const params = profiles.get(o.id)[r].params;
-          const item = (p) => h('li', { class: p.mark === 'fixed' && 'fixed', title: p.mark === 'fixed' ? 'Fixed: every option has it' : null }, p.title || 'Untitled');
+          // an extension highlights what it adds or changes compared to the option it extends
+          const isNew = (p) => o.extends !== null && findOption(space, o.extends) && !isSelected(p, o.extends);
+          const tip = (p) => (p.mark === 'fixed' ? 'Fixed: every option has it' : isNew(p) ? `New compared to O${o.extends}` : null);
+          const item = (p) => h('li', { class: [p.mark === 'fixed' && 'fixed', isNew(p) && 'added'], title: tip(p) }, p.title || 'Untitled');
           return h('td', { class: !params.length && 'none' }, params.length ? h('ul', null, params.map(item)) : '—');
         }),
       ),
@@ -198,7 +200,7 @@ function renderRatings(app, opts) {
       const score = r ? r.score : null;
       const note = r ? r.note : '';
       const sel = ratingSel(c.id, o.id);
-      const style = { ...optionVars(o.id) };
+      const style = { ...optionVars(space, o.id) };
       if (v.heatmap && score !== null) style['--heat'] = Math.round(6 + 22 * scoreFraction(score, scale)) + '%';
       tr.append(
         h(
@@ -246,7 +248,7 @@ function renderRatings(app, opts) {
         const r = ranks.get(o.id);
         return h(
           'td',
-          { class: ['total', topRank(o.id) && 'top'], style: optionVars(o.id) },
+          { class: ['total', topRank(o.id) && 'top'], style: optionVars(space, o.id) },
           h('span', { class: 'total-val' }, r.display === null ? '–' : r.display.toFixed(1)),
           h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { class: 'bar-fill', style: { width: (scoreFraction(r.score, scale) * 100).toFixed(1) + '%' } })),
         );
@@ -675,7 +677,7 @@ export function ratingInspector(app, { criterion: c, option: o }) {
       'dl',
       { class: 'profile rating-ref' },
       h('dt', null, 'Option'),
-      h('dd', { class: 'option-ref' }, swatch(o.id, app.state.lineStyles), h('span', null, `O${o.id} ${o.title || 'Untitled'}`)),
+      h('dd', { class: 'option-ref' }, swatch(space, o.id), h('span', null, `O${o.id} ${o.title || 'Untitled'}`)),
       h('dt', null, 'Criterion'),
       h('dd', null, `C${c.id} ${c.title || 'Untitled'}`, h('span', { class: 'muted' }, ` · weight ${c.weight}`)),
       c.note ? h('dt', null, 'Great means') : null,

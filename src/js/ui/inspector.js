@@ -7,11 +7,9 @@ import {
   findOption,
   optionProfile,
   looksDecided,
-  setStage,
-  stageName,
-  cleanStageName,
-  STAGES,
-  DEFAULT_STAGE_NAMES,
+  canExtend,
+  setExtends,
+  extendOption,
   coordinate,
   rowLetter,
   duplicateOption,
@@ -189,7 +187,7 @@ function nodeInspector(app, { kind, found }) {
             'label',
             { class: 'pick-row', for: id },
             h('input', { type: 'checkbox', id, checked: node.picks.includes(o.id), onchange: () => app.pick(node, o.id) }),
-            swatch(o.id, app.state.lineStyles),
+            swatch(space, o.id),
             h('span', { class: 'id' }, 'O' + o.id),
             h('span', { class: ['pick-title', !o.title && 'empty'] }, o.title || 'Untitled'),
             o.id <= 9 ? h('kbd', null, String(o.id)) : null,
@@ -210,26 +208,28 @@ function nodeInspector(app, { kind, found }) {
   return out;
 }
 
-/** One toggle per stage; pressing the current stage clears it. */
-function stageButtons(app, option) {
-  return STAGES.map((n) =>
-    h(
-      'button',
-      {
-        class: ['toggle', 'stage-toggle', 'stage-' + n],
-        'aria-pressed': option.stage === n ? 'true' : 'false',
-        onclick: () => app.change(() => setStage(option, option.stage === n ? null : n)),
-      },
-      stageName(app.space, n),
-    ),
+/** Which option this one extends: none, or any option that makes no loop. */
+function extendsField(app, option) {
+  const { space } = app;
+  const choices = space.options.filter((o) => o.id !== option.id && canExtend(space, option.id, o.id));
+  const select = h(
+    'select',
+    {
+      class: 'field-input',
+      id: 'inspector-extends',
+      onchange: (e) => app.change(() => setExtends(space, option.id, e.target.value === '' ? null : Number(e.target.value))),
+    },
+    h('option', { value: '', selected: option.extends === null }, 'Nothing: a solution of its own'),
+    choices.map((o) => h('option', { value: String(o.id), selected: option.extends === o.id }, `O${o.id} ${o.title || 'Untitled'}`)),
   );
+  return h('div', { class: 'field' }, h('label', { class: 'field-label', for: 'inspector-extends' }, 'Extends'), select);
 }
 
 function optionInspector(app, option) {
   const { space, state } = app;
-  const out = [head('Option', null, h('span', { class: 'insp-ref option-ref' }, swatch(option.id, state.lineStyles), 'O' + option.id))];
+  const out = [head('Option', null, h('span', { class: 'insp-ref option-ref' }, swatch(space, option.id), 'O' + option.id))];
   out.push(titleField(app, option), noteField(app, option, 'Note', 'What is the idea behind this option?'));
-  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage'), h('div', { class: 'segmented stage-choice' }, stageButtons(app, option))));
+  out.push(extendsField(app, option));
   const active = state.activeOption === option.id;
   out.push(
     h(
@@ -257,6 +257,21 @@ function optionInspector(app, option) {
     h(
       'div',
       { class: 'insp-actions' },
+      h(
+        'button',
+        {
+          class: 'btn',
+          title: 'Start a later version of this option: same colour, dashed path, same picks to begin with',
+          onclick: () => {
+            let ext;
+            app.change(() => (ext = extendOption(space, option.id)));
+            app.activateOption(ext.id, true);
+            app.inspectOption(ext.id, { focusTitle: true });
+            app.toast(`O${ext.id} extends O${option.id}. Change its picks, then name it.`);
+          },
+        },
+        'Extend',
+      ),
       h(
         'button',
         {
@@ -328,20 +343,6 @@ function documentInspector(app) {
       },
     });
   out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Rating scale'), h('div', { class: 'scale-row' }, scaleInput('min'), h('span', null, 'to'), scaleInput('max'))));
-  const stageNames = h('div', { class: 'stage-names' });
-  for (const n of STAGES) {
-    stageNames.append(
-      field(app, {
-        label: `Stage ${n}`,
-        value: meta.stages[n - 1],
-        placeholder: DEFAULT_STAGE_NAMES[n - 1],
-        cls: 'stage-' + n,
-        onInput: (v) => (meta.stages[n - 1] = v),
-        onCommit: (v) => (meta.stages[n - 1] = cleanStageName(v) || DEFAULT_STAGE_NAMES[n - 1]),
-      }),
-    );
-  }
-  out.push(h('div', { class: 'field' }, h('span', { class: 'field-label' }, 'Stage names'), stageNames));
   if (meta.updated) out.push(h('p', { class: 'insp-meta' }, 'Last saved ' + meta.updated));
   if (meta.extra.length) {
     const dl = h('dl', { class: 'profile' });

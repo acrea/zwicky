@@ -551,7 +551,7 @@ svg.paths {
   padding-top: 10px;
 }
 
-/* states: selected, fixed, out, picked, beyond the scope filter */
+/* states: selected, fixed, out, picked */
 .cell.mark-fixed {
   background: var(--mark-fixed-bg);
   box-shadow: inset 3px 0 0 var(--mark-fixed-rule);
@@ -568,10 +568,6 @@ svg.paths {
   font-size: 9px;
   line-height: 1;
   color: var(--mark-fixed-ink);
-}
-.chip.beyond-scope,
-.opt-head.beyond-scope > * {
-  opacity: var(--beyond-scope-opacity);
 }
 .cell.mark-out .title {
   color: var(--mark-out-ink);
@@ -678,7 +674,7 @@ svg.paths {
   font-size: var(--fs-xs);
   color: var(--ink-muted);
 }
-.chip .stage-pill {
+.chip .extends-ref {
   flex-shrink: 0;
 }
 .chip-title {
@@ -893,55 +889,17 @@ textarea.field-input {
   display: flex;
   gap: var(--space-1);
 }
-.stage-choice {
-  flex-wrap: wrap;
-}
-.toggle.stage-1:not([aria-pressed='true']),
-.stage-pill.stage-1,
-.legend-swatch.stage-1 {
-  background: var(--stage-1-bg);
-}
-.toggle.stage-2:not([aria-pressed='true']),
-.stage-pill.stage-2,
-.legend-swatch.stage-2 {
-  background: var(--stage-2-bg);
-}
-.toggle.stage-3:not([aria-pressed='true']),
-.stage-pill.stage-3,
-.legend-swatch.stage-3 {
-  background: var(--stage-3-bg);
-}
-.stage-toggle {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-.stage-toggle[aria-pressed='true'] kbd {
-  background: transparent;
-  color: inherit;
-  border-color: currentColor;
-}
-.stage-pill {
+/* "↳ O2" on an extension's chip and column head */
+.extends-ref {
   display: inline-block;
-  padding: 0 7px;
-  border-radius: 999px;
-  border: 1px solid var(--rule);
-  font-family: var(--font-ui);
+  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 16px;
-  color: var(--ink);
+  color: var(--ink-muted);
   white-space: nowrap;
 }
-.stage-names {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.stage-names .field-label {
-  font-size: var(--fs-xs);
-}
 
-/* legend and scope filter above the grids */
+/* legend above the box */
 .legend-bar {
   display: flex;
   flex-wrap: wrap;
@@ -987,16 +945,10 @@ textarea.field-input {
 .legend-swatch.mark-out {
   background: linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--mark-out-ink) calc(50% - 0.5px), var(--mark-out-ink) calc(50% + 0.5px), transparent calc(50% + 0.5px));
 }
-.eval-bar .scope-filter {
-  margin-left: var(--space-4);
-}
-.scope-filter {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.scope-filter .toggle {
-  font-size: var(--fs-xs);
+.legend-line {
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 .mark-toggle {
   display: inline-flex;
@@ -1075,6 +1027,13 @@ textarea.field-input {
 }
 .profile .fixed,
 .profile-table li.fixed {
+  color: var(--ink-muted);
+}
+.profile-table li.added {
+  font-weight: 600;
+}
+.profile-table li.added::before {
+  content: '+ ';
   color: var(--ink-muted);
 }
 .profile-table li.fixed::before {
@@ -1380,7 +1339,7 @@ textarea.field-input {
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
 }
-.opt-head > .stage-pill {
+.opt-head > .extends-ref {
   display: table;
   margin: -4px 0 8px var(--cell-pad-x);
 }

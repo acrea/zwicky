@@ -3,7 +3,7 @@
 // "+ Dimension" row ends the grid. Parameters are open, fixed or out.
 
 import { h, s } from './dom.js';
-import { findNode, removeNode, moveNode, moveParameter, nodeHasContent, inScope, findOption, optionColour, coordinate, rowLetter } from '../model.js';
+import { findNode, removeNode, moveNode, moveParameter, nodeHasContent, findOption, optionLook, coordinate, rowLetter } from '../model.js';
 
 const SECTION = 'box';
 
@@ -43,16 +43,17 @@ export function fixCursor(space, sel, fallbackPos) {
 
 // ---------------------------------------------------------------- render
 
-const DASHES = ['', '6 4', '1.5 4', '8 4 1.5 4', '12 4', '3 3', '10 3 1.5 3 1.5 3', '1.5 7'];
+/** Line styles by depth: an option solid, its first extension dashed, later extensions dotted. */
+export const DASHES = ['', '6 4', '1.5 4'];
 
-export function optionStyle(id, lineStyles) {
-  const { colour, style } = optionColour(id);
-  const dashIndex = lineStyles ? (id - 1) % DASHES.length : Math.min(style, 1);
-  return { colour, style, dash: DASHES[dashIndex] };
+/** How option `id` is drawn: its colour slot, its extension depth and the dash pattern. */
+export function optionStyle(space, id) {
+  const { colour, depth } = optionLook(space, id);
+  return { colour, depth, dash: DASHES[Math.min(depth, DASHES.length - 1)] };
 }
 
-export function optionVars(id) {
-  const { colour } = optionColour(id);
+export function optionVars(space, id) {
+  const { colour } = optionLook(space, id);
   return { '--opt': `var(--option-${colour})`, '--on-opt': `var(--on-option-${colour})` };
 }
 
@@ -138,15 +139,14 @@ export function renderGrid(app) {
       if (!p.mark) {
         if (active !== null && p.picks.includes(active)) {
           cls.push('picked');
-          style = optionVars(active);
+          style = optionVars(space, active);
         }
         for (const o of space.options) {
-          if (o.id === active || !p.picks.includes(o.id) || !inScope(o.stage, state.scopeUpTo)) continue;
-          const { style: ls } = optionColour(o.id);
+          if (o.id === active || !p.picks.includes(o.id)) continue;
           markers.push(
             h(
               'span',
-              { class: ['marker', ls > 0 && 'alt'], style: optionVars(o.id), title: `O${o.id} ${o.title}` },
+              { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt'], style: optionVars(space, o.id), title: `O${o.id} ${o.title}` },
               String(o.id),
             ),
           );

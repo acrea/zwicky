@@ -49,8 +49,6 @@ const app = {
     activeOption: null,
     pickMode: false,
     compare: !!prefs.compare,
-    lineStyles: !!prefs.lineStyles,
-    scopeUpTo: null, // view filter: grey out what lies beyond stage n (not saved)
     evalView: { sortByRank: false, showNotes: false, heatmap: false, ...(prefs.evalView || {}) },
     inspectorOpen: prefs.inspectorOpen !== false,
     density: DENSITIES.includes(prefs.density) ? prefs.density : 'normal',
@@ -73,8 +71,8 @@ const autosave = store.debounce(() => {
 }, 400);
 
 function savePrefs() {
-  const { tab, compare, lineStyles, inspectorOpen, density, coords, evalView } = app.state;
-  store.savePrefs({ tab, compare, lineStyles, inspectorOpen, density, coords, evalView });
+  const { tab, compare, inspectorOpen, density, coords, evalView } = app.state;
+  store.savePrefs({ tab, compare, inspectorOpen, density, coords, evalView });
 }
 
 app.markDirty = () => {
@@ -208,11 +206,6 @@ app.focusInspectorField = (id) => {
     el.focus();
     if (el.select && el.tagName === 'INPUT') el.select();
   }
-};
-
-app.setScope = (upTo) => {
-  app.state.scopeUpTo = upTo;
-  app.render();
 };
 
 app.setView = (patch) => {
@@ -465,7 +458,7 @@ function renderMain() {
     if (tab === 'box') {
       els.head.append(problemBand());
       els.head.append(renderOptionsBar(app));
-      els.head.append(renderLegend(app));
+      els.head.append(renderLegend());
     }
     if (tab === 'evaluation') els.head.append(renderEvalHead(app));
   }

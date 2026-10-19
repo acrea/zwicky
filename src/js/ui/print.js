@@ -4,12 +4,12 @@
 // then each section is scaled to fit a landscape page.
 
 import { h, s } from './dom.js';
-import { coordinate, rowLetter, getRating, rankOptions, scoreFraction, optionColour, inScope } from '../model.js';
+import { coordinate, rowLetter, getRating, rankOptions, scoreFraction, optionLook } from '../model.js';
 import { optionVars, MARK_INFO } from './grid.js';
 import { drawPaths } from './paths.js';
-import { swatch } from './options-bar.js';
+import { swatch, extendsRef } from './options-bar.js';
 import { displayOptions, renderProfiles, ordinal } from './evaluation.js';
-import { legendItems, stagePill } from './legend.js';
+import { legendItems } from './legend.js';
 
 // Landscape A4 or Letter with 12 mm margins is at least ~960 CSS px wide.
 const PAGE_WIDTH = 960;
@@ -50,11 +50,11 @@ function staticGrid(app, notes) {
       if (!p.mark) {
         if (active !== null && p.picks.includes(active)) {
           cls.push('picked');
-          style = optionVars(active);
+          style = optionVars(space, active);
         }
         for (const o of space.options) {
-          if (o.id === active || !p.picks.includes(o.id) || !inScope(o.stage, state.scopeUpTo)) continue;
-          markers.push(h('span', { class: ['marker', optionColour(o.id).style > 0 && 'alt'], style: optionVars(o.id) }, String(o.id)));
+          if (o.id === active || !p.picks.includes(o.id)) continue;
+          markers.push(h('span', { class: ['marker', optionLook(space, o.id).depth > 0 && 'alt'], style: optionVars(space, o.id) }, String(o.id)));
         }
       }
       const glyph = p.mark && MARK_INFO[p.mark].glyph;
@@ -103,11 +103,11 @@ function optionLegend(app) {
     items.map((o) =>
       h(
         'li',
-        { class: o.id === state.activeOption && 'active', style: optionVars(o.id) },
-        swatch(o.id, state.lineStyles),
+        { class: o.id === state.activeOption && 'active', style: optionVars(app.space, o.id) },
+        swatch(app.space, o.id),
         h('span', { class: 'id' }, 'O' + o.id),
         h('span', { class: 'legend-title' }, o.title || 'Untitled'),
-        stagePill(app.space, o.stage),
+        extendsRef(o),
         o.note ? h('span', { class: 'legend-note' }, o.note) : null,
       ),
     ),
@@ -128,7 +128,7 @@ function ratingMatrix(app, opts, notes) {
         null,
         h('th', { class: 'corner crit-col' }, 'Criterion'),
         h('th', { class: 'weight-col' }, 'Weight'),
-        opts.map((o) => h('th', { class: 'opt-head', style: optionVars(o.id) }, h('span', { class: 'opt-head-btn' }, swatch(o.id), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: 'opt-title' }, o.title || 'Untitled')))),
+        opts.map((o) => h('th', { class: 'opt-head', style: optionVars(space, o.id) }, h('span', { class: 'opt-head-btn' }, swatch(space, o.id), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: 'opt-title' }, o.title || 'Untitled')), extendsRef(o))),
       ),
     ),
   );
@@ -155,7 +155,7 @@ function ratingMatrix(app, opts, notes) {
         h('th', { class: 'crit-col', colspan: '2' }, 'Weighted score'),
         opts.map((o) => {
           const r = ranks.get(o.id);
-          return h('td', { class: ['total', r.rank === 1 && 'top'], style: optionVars(o.id) }, h('span', { class: 'total-val' }, r.display === null ? '–' : r.display.toFixed(1)), h('span', { class: 'bar' }, h('span', { class: 'bar-fill', style: { width: (scoreFraction(r.score, scale) * 100).toFixed(1) + '%' } })));
+          return h('td', { class: ['total', r.rank === 1 && 'top'], style: optionVars(space, o.id) }, h('span', { class: 'total-val' }, r.display === null ? '–' : r.display.toFixed(1)), h('span', { class: 'bar' }, h('span', { class: 'bar-fill', style: { width: (scoreFraction(r.score, scale) * 100).toFixed(1) + '%' } })));
         }),
       ),
       h('tr', { class: 'unrated-row' }, h('th', { class: 'crit-col', colspan: '2' }, 'Unrated'), opts.map((o) => h('td', null, String(ranks.get(o.id).unrated)))),
@@ -184,7 +184,7 @@ export function preparePrint(app) {
   if (space.problem || space.dims.length) {
     const notes = footnotes();
     boxCanvas = staticGrid(app, notes);
-    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), h('div', { class: 'legend' }, legendItems(app)), optionLegend(app), boxCanvas, notes.render()));
+    sections.push(h('section', { class: 'print-section' }, sectionHead(app, 'Box'), band(space.problem), h('div', { class: 'legend' }, legendItems()), optionLegend(app), boxCanvas, notes.render()));
   }
   const opts = displayOptions(app);
   if (opts.length || space.criteria.length) {
