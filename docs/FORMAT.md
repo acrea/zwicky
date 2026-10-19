@@ -29,7 +29,6 @@ Everything else in the box is **open**: options pick from it.
 zwicky: 2
 title: Car Concept
 scale: 1-5
-stages: Pilot, Rollout, Full
 updated: 2026-10-16
 ---
 
@@ -53,10 +52,13 @@ updated: 2026-10-16
 
 # Options
 
-## O1 Athletic hybrid SUV {stage=2}
+## O1 Athletic hybrid SUV
 > An option note.
 
-## O2 City coupé {stage=1}
+## O2 City coupé
+
+## O3 City coupé with rail partnership {extends=O2}
+> A later extension of O2.
 
 # Criteria
 
@@ -88,7 +90,6 @@ The file starts with a front matter block between two `---` lines. It is a stric
 | `zwicky` | Format version. Required; currently `2`. |
 | `title` | Document title. |
 | `scale` | Rating scale `<min>-<max>`, non-negative integers, `min < max ≤ 100`. Default `1-5`. |
-| `stages` | Names of the three stages (horizons) options can belong to, comma-separated: `stages: Pilot, Rollout, Full`. Default `Horizon 1, Horizon 2, Horizon 3`, which is not written. Names cannot contain commas. |
 | `updated` | ISO date (`YYYY-MM-DD`), set by zwicky on Save. |
 
 Other keys are kept, in their original order.
@@ -122,7 +123,7 @@ Only `# Problem` takes a note under its heading.
 
 - Headings start with the id: `## O3 Title`, `## C2 Title`. Ids are positive integers, assigned once (highest + 1) and never renumbered.
 - A criterion's **weight** is an integer 0–10, written as `{w=3}`. The default is 1 and is not written. Weight 0 excludes the criterion from the total.
-- An option can belong to a **stage**, the horizon it is meant for: `## O2 City coupé {stage=1}`, with a stage from 1 to 3. No tag means no stage. The stage names come from the `stages` front matter key.
+- An option can **extend** another option: `## O3 City coupé with rail partnership {extends=O2}`. An extension is a later version of the same solution, e.g. version 1, then a first and a second extension (`O4 {extends=O3}`). It is a full option with its own picks; the link groups it with the option it extends. zwicky draws an extension in the colour of the option its chain starts from, with a dashed line (first extension) or a dotted line (second and later). An option extends at most one option, never itself, and links never form a loop.
 
 ### Ratings
 
@@ -150,7 +151,7 @@ Only `# Problem` takes a note under its heading.
 | `fixed` | Parameters | Already decided; every option has it. |
 | `out` | Parameters | Excluded; cannot be picked. |
 | `O<n>` | Open parameters | Picked by option `O<n>`. |
-| `stage=<1–3>` | Option headings | The stage (horizon) the option belongs to. |
+| `extends=O<n>` | Option headings | The option this one extends. |
 | `w=<int>` | Criterion headings | Weight 0–10. |
 
 Any other token is **kept** (and reported as unknown), so other tools can add their own.
@@ -183,11 +184,11 @@ is read as
 This is exactly what zwicky writes:
 
 - UTF-8 without BOM, LF line endings, exactly one trailing newline, no trailing spaces.
-- Front matter keys in the order `zwicky`, `title`, `scale`, `stages`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set; `stages` only when the names differ from the defaults.
+- Front matter keys in the order `zwicky`, `title`, `scale`, `updated`, then other keys in their original order. `scale` is always written; `title` and `updated` only when set.
 - A blank line after the closing `---`, and exactly one blank line before every `#` and `##` heading. No other blank lines: notes follow their heading or item directly, and the list items of a dimension or rating block are contiguous.
 - Notes use `> ` (one space) and `>` for empty lines; list-item notes use `  > `. Leading and trailing empty note lines are dropped.
 - List bullets are `- `.
-- Tag tokens: a parameter's mark (`fixed` or `out`) or its option ids sorted numerically, an option's `stage=<n>`, a criterion's `w=<n>`; then unknown tokens in their original order. `{w=1}` is omitted.
+- Tag tokens: a parameter's mark (`fixed` or `out`) or its option ids sorted numerically, an option's `extends=O<n>`, a criterion's `w=<n>`; then unknown tokens in their original order. `{w=1}` is omitted.
 - Sections in the order Problem, Box, Options, Criteria, Ratings, Notes. Empty sections are omitted.
 - In `# Ratings`, options follow the Options order and rating lines follow the Criteria order. Options without any rating or rating note are omitted.
 - `# Notes` is written verbatim (trailing spaces and leading/trailing blank lines removed).
@@ -209,8 +210,7 @@ Each of these opens fine. Items marked † add a line to the import report.
 - Unknown tag tokens: kept †.
 - A title that still ends in `{…}` after the tag group is removed, e.g. `- Budget {in CHF} {O2}`: the title's braces become parentheses †.
 - A parameter with both `fixed` and `out`: the first wins †. Picks on a fixed or out parameter: dropped †.
-- A stage outside 1–3 (`{stage=7}`): kept as an unknown tag †.
-- `stages` with fewer than three names: the missing ones get the defaults †; with more than three: the extra names are dropped †.
+- `extends` pointing to an unknown option, to the option itself or into a loop, or a second `extends` on one option: dropped †.
 - `###` sub-dimensions: flattened †.
 - A section repeated: merged †.
 - Headings or list items under `# Problem`, notes directly under other section headings, unknown `#` sections and lines that fit nowhere (paragraph text, list items outside a dimension, notes with nothing to belong to): moved to `# Notes` †.

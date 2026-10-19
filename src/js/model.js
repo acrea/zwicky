@@ -4,10 +4,10 @@
 // Shape (plain JSON, so history can snapshot it):
 //
 //   space = {
-//     meta:     { title, scale: { min, max }, stages: [name × 3], updated, extra: [[key, value], …] },
+//     meta:     { title, scale: { min, max }, updated, extra: [[key, value], …] },
 //     problem:  '',                     // the problem statement, shown above the box
 //     dims:     [Dimension],            // the box: dimensions × parameters
-//     options:  [{ uid, id, title, note, stage, tags }],
+//     options:  [{ uid, id, title, note, extends, tags }],
 //     criteria: [{ uid, id, title, note, weight, tags }],
 //     ratings:  { O1: { C1: { score, note, tags } } },
 //     passthrough: [line, …],           // the "# Notes" section, verbatim
@@ -21,9 +21,11 @@
 // picks. An out parameter is excluded and cannot be picked. Only open
 // parameters carry picks.
 //
-// Options can name a stage (1–3, the horizon they belong to). Stage names are
-// set per space; `null` means none. `tags` keeps unknown {…} tokens so they
-// survive a round trip.
+// An option can extend another option (`extends` holds its id, or null): a later
+// version of the same solution. An extension is a full option with its own
+// picks; the link only groups it with the option it extends, so it is drawn in
+// that option's colour with a dashed (then dotted) line. `tags` keeps unknown
+// {…} tokens so they survive a round trip.
 
 export const FORMAT_VERSION = 2;
 export const DEFAULT_SCALE = Object.freeze({ min: 1, max: 5 });
@@ -32,8 +34,6 @@ export const WEIGHT_MAX = 10;
 export const DEFAULT_WEIGHT = 1;
 export const OPTION_COLOURS = 8;
 export const MARKS = ['fixed', 'out'];
-export const STAGES = [1, 2, 3];
-export const DEFAULT_STAGE_NAMES = Object.freeze(['Horizon 1', 'Horizon 2', 'Horizon 3']);
 
 let uidCounter = 0;
 export function uid() {
@@ -59,7 +59,7 @@ export function cleanTitle(title) {
 
 export function createSpace(title = '') {
   return {
-    meta: { title, scale: { ...DEFAULT_SCALE }, stages: [...DEFAULT_STAGE_NAMES], updated: '', extra: [] },
+    meta: { title, scale: { ...DEFAULT_SCALE }, updated: '', extra: [] },
     problem: '',
     dims: [],
     options: [],
@@ -78,7 +78,7 @@ export function createParameter(title = '', note = '') {
 }
 
 export function createOption(id, title = '', note = '') {
-  return { uid: uid(), id, title, note, stage: null, tags: [] };
+  return { uid: uid(), id, title, note, extends: null, tags: [] };
 }
 
 export function createCriterion(id, title = '', note = '', weight = DEFAULT_WEIGHT) {
@@ -100,10 +100,9 @@ export function nextId(items) {
   return max + 1;
 }
 
-/** Option colour slot 1..8, and line style 0.. (0 solid, 1 dashed, …) from the numeric id. */
-export function optionColour(id) {
-  const n = Math.max(1, id | 0) - 1;
-  return { colour: (n % OPTION_COLOURS) + 1, style: Math.floor(n / OPTION_COLOURS) };
+/** Colour slot 1..8 from the numeric id; from O9 on the colours repeat. */
+export function colourSlot(id) {
+  return ((Math.max(1, id | 0) - 1) % OPTION_COLOURS) + 1;
 }
 
 /** Row letters for coordinates: A..Z, AA..AZ, BA… */
@@ -249,32 +248,64 @@ export function looksDecided(dim) {
   return dim.params.length === 1 && dim.params[0].mark === null;
 }
 
-// ---------------------------------------------------------------- stages
+// ---------------------------------------------------------------- extensions
 
-export const isStage = (n) => STAGES.includes(n);
-
-/** Sets the stage of an option (null clears it). */
-export function setStage(option, stage) {
-  option.stage = isStage(stage) ? stage : null;
+/** The chain of options an option extends, nearest first: O6 → [O4, O1]. Stops at a missing option or a loop. */
+export function baseChain(space, id) {
+  const chain = [];
+  const seen = new Set([id]);
+  let option = findOption(space, id);
+  while (option && option.extends !== null && !seen.has(option.extends)) {
+    seen.add(option.extends);
+    option = findOption(space, option.extends);
+    if (option) chain.push(option);
+  }
+  return chain;
 }
 
-/** The display name of stage 1–3 in this space. */
-export function stageName(space, stage) {
-  const names = (space.meta && space.meta.stages) || DEFAULT_STAGE_NAMES;
-  return (names[stage - 1] || '').trim() || DEFAULT_STAGE_NAMES[stage - 1];
+/** How an option is drawn: the colour of the option its chain starts from, and its depth (0 solid, 1 dashed, 2+ dotted). */
+export function optionLook(space, id) {
+  const chain = baseChain(space, id);
+  const root = chain.length ? chain[chain.length - 1].id : id;
+  return { colour: colourSlot(root), depth: chain.length };
 }
 
-/** Stage names are single-line and comma-free, because the file lists them comma-separated. */
-export function cleanStageName(name) {
-  return String(name ?? '')
-    .replace(/[\r\n,]+/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
+/** Whether option `id` may extend option `baseId`: it exists, and the link makes no loop. */
+export function canExtend(space, id, baseId) {
+  if (baseId === null) return true;
+  if (baseId === id || !findOption(space, baseId)) return false;
+  return !baseChain(space, baseId).some((o) => o.id === id);
 }
 
-/** Whether an option with `stage` lies within a "scope up to stage `upTo`" filter (null = no filter). */
-export function inScope(stage, upTo) {
-  return !upTo || (isStage(stage) && stage <= upTo);
+/** Links option `id` to the option it extends (null unlinks). Returns false if the link is not allowed. */
+export function setExtends(space, id, baseId) {
+  const option = findOption(space, id);
+  if (!option || !canExtend(space, id, baseId)) return false;
+  option.extends = baseId;
+  return true;
+}
+
+/** The options that extend option `id`, directly or further down the chain. */
+export function extensionsOf(space, id) {
+  return space.options.filter((o) => baseChain(space, o.id).some((b) => b.id === id));
+}
+
+/**
+ * Starts an extension of option `id`: a new option that extends it, with the
+ * same picks, placed after the option and its existing extensions.
+ */
+export function extendOption(space, id) {
+  const items = space.options;
+  const base = findOption(space, id);
+  if (!base) return null;
+  const ext = createOption(nextId(items), '');
+  ext.extends = id;
+  const family = new Set([base, ...extensionsOf(space, id)]);
+  let at = items.indexOf(base) + 1;
+  while (at < items.length && family.has(items[at])) at += 1;
+  items.splice(at, 0, ext);
+  for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, ext.id);
+  return ext;
 }
 
 // ---------------------------------------------------------------- options
@@ -286,13 +317,13 @@ export function addOption(space, title = '', index = Infinity) {
   return option;
 }
 
-/** Copies an option's title, note, stage, picks and ratings into a new option right after it. */
+/** Copies an option's title, note, link, picks and ratings into a new option right after it. */
 export function duplicateOption(space, id) {
   const items = space.options;
   const source = findOption(space, id);
   if (!source) return null;
   const copy = createOption(nextId(items), source.title, source.note);
-  copy.stage = source.stage;
+  copy.extends = source.extends;
   copy.tags = [...source.tags];
   items.splice(items.indexOf(source) + 1, 0, copy);
   for (const p of allParameters(space)) if (p.picks.includes(id)) togglePick(p, copy.id);
@@ -301,11 +332,12 @@ export function duplicateOption(space, id) {
   return copy;
 }
 
-/** Deletes an option with its picks and ratings. */
+/** Deletes an option with its picks and ratings. Its extensions become options of their own. */
 export function removeOption(space, id) {
   const i = space.options.findIndex((o) => o.id === id);
   if (i < 0) return false;
   space.options.splice(i, 1);
+  for (const o of space.options) if (o.extends === id) o.extends = null;
   for (const p of allParameters(space)) p.picks = p.picks.filter((x) => x !== id);
   delete space.ratings[optionKey(id)];
   return true;

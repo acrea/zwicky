@@ -45,17 +45,19 @@ test('car concept: parsed content', () => {
       ['Diesel', null, [3]],
       ['Hybrid', null, [1]],
       ['Hydrogen', 'out', []],
-      ['Electric', null, [2]],
+      ['Electric', null, [2, 4, 5]],
     ],
   );
   const target = space.dims.find((d) => d.title === 'Target group');
   assert.equal(target.params[0].note, 'High Net Worth Individuals. Covered by our sister brand.');
   assert.deepEqual(
-    space.options.map((o) => [o.id, o.title, o.stage]),
+    space.options.map((o) => [o.id, o.title, o.extends]),
     [
-      [1, 'Athletic hybrid SUV', 3],
-      [2, 'City coupé', 1],
-      [3, 'Family hauler', 2],
+      [1, 'Athletic hybrid SUV', null],
+      [2, 'City coupé', null],
+      [4, 'City coupé with rail partnership', 2],
+      [5, 'Long-distance coupé', 4],
+      [3, 'Family hauler', null],
     ],
   );
   assert.deepEqual(
@@ -81,8 +83,8 @@ test('car concept: several picks in one dimension, none in another', () => {
     target.params.filter((p) => p.picks.includes(1)).map((p) => p.title),
     ['LOHAS', 'WOOPIEs'],
   );
-  const seats = space.dims.find((d) => d.title === 'Seats');
-  assert.ok(seats.params.every((p) => !p.picks.includes(4)));
+  const front = space.dims.find((d) => d.title === 'Front design');
+  assert.ok(front.params.every((p) => !p.picks.includes(2)));
 });
 
 test('slide generator: a box with options but no evaluation yet', () => {
@@ -118,8 +120,10 @@ test('messy input reads to the expected canonical output', () => {
     [28, /Sub-dimension "Mit Einschränkung" flattened/],
     [32, /kept under # Notes/],
     [34, /Duplicate pick O1/],
-    [41, /Stage 4 does not exist/],
+    [39, /O1 cannot extend O1/],
+    [41, /extends more than one option; "extends=O3" dropped/],
     [42, /Duplicate id O2; re-assigned as O3/],
+    [42, /Unknown option O9; "extends" dropped/],
     [43, /without an id; assigned O4/],
     [47, /Weight 12 .* set to 10/],
     [48, /Duplicate id C1; re-assigned as C2/],
@@ -393,52 +397,47 @@ test('normNote and fileName', () => {
   assert.equal(fileName(''), 'untitled.zwicky.md');
 });
 
-// ---------------------------------------------------------------- stages
+// ---------------------------------------------------------------- extensions
 
-test('options carry {stage=n}; stage names come from the front matter', () => {
+test('options carry {extends=O<n>}; it is written first, before unknown tags', () => {
   const text = [
     '---',
     'zwicky: 2',
     'scale: 1-5',
-    'stages: Pilot, Rollout, Full',
     '---',
     '',
     '# Options',
     '',
-    '## O1 Small start {stage=1}',
+    '## O1 Small start',
     '',
-    '## O2 Everything {stage=3 later}',
+    '## O2 Next step {extends=O1 later}',
     '',
-    '## O3 Unstaged',
+    '## O3 Third step {extends=O2}',
     '',
   ].join('\n');
   const { space, report } = parse(text);
   assert.deepEqual(report.filter((r) => r.level !== 'info'), []);
-  assert.deepEqual(space.meta.stages, ['Pilot', 'Rollout', 'Full']);
-  assert.deepEqual(space.options.map((o) => [o.stage, o.tags]), [[1, []], [3, ['later']], [null, []]]);
+  assert.deepEqual(space.options.map((o) => [o.extends, o.tags]), [[null, []], [1, ['later']], [2, []]]);
   assert.equal(serialize(space), text);
 });
 
-test('default stage names are not written; partial or extra names are reported', () => {
-  assert.doesNotMatch(serialize(createSpace()), /stages:/);
-  const s = createSpace();
-  s.meta.stages = ['Horizon 1', 'Horizon 2', 'Horizon 3'];
-  assert.doesNotMatch(serialize(s), /stages:/);
-  s.meta.stages = ['Now, today', ' Next\n', 'Later'];
-  assert.match(serialize(s), /\nstages: Now today, Next, Later\n/);
-
-  const few = parse('---\nzwicky: 2\nstages: Now\n---\n');
-  assert.deepEqual(few.space.meta.stages, ['Now', 'Horizon 2', 'Horizon 3']);
-  assert.ok(few.report.some((r) => /filled in with the defaults/.test(r.message)));
-  const many = parse('---\nzwicky: 2\nstages: A, B, C, D\n---\n');
-  assert.deepEqual(many.space.meta.stages, ['A', 'B', 'C']);
-  assert.ok(many.report.some((r) => r.level === 'warning' && /"D" dropped/.test(r.message)));
+test('a link to an unknown option, to itself or in a loop is dropped with a report', () => {
+  const { space, report } = parse('---\nzwicky: 2\n---\n# Options\n## O1 A {extends=O2}\n## O2 B {extends=O1}\n## O3 C {extends=O3}\n## O4 D {extends=O7}\n');
+  assert.deepEqual(space.options.map((o) => o.extends), [2, null, null, null]);
+  assert.match(report.find((r) => r.line === 6).message, /O2 cannot extend O1/);
+  assert.match(report.find((r) => r.line === 7).message, /O3 cannot extend O3/);
+  assert.match(report.find((r) => r.line === 8).message, /Unknown option O7/);
 });
 
-test('invalid stages are reported and kept as unknown tags; stages on parameters are unknown tags', () => {
-  const { space, report } = parse('---\nzwicky: 2\n---\n# Box\n## D\n- A {stage=1}\n# Options\n## O1 X {stage=7}\n');
-  assert.deepEqual([space.dims[0].params[0].mark, space.dims[0].params[0].tags], [null, ['stage=1']]);
-  assert.deepEqual([space.options[0].stage, space.options[0].tags], [null, ['stage=7']]);
-  assert.ok(report.some((r) => /Stage 7 does not exist/.test(r.message)));
-  assert.ok(report.some((r) => /Unknown tag "stage=1" kept/.test(r.message)));
+test('a link to a deleted option is not written', () => {
+  const { space } = parse('---\nzwicky: 2\n---\n# Options\n## O1 A\n## O2 B {extends=O1}\n');
+  space.options.shift();
+  assert.doesNotMatch(serialize(space), /extends/);
+});
+
+test('stages from earlier drafts are only unknown keys and tags now', () => {
+  const { space, report } = parse('---\nzwicky: 2\nstages: Pilot, Rollout, Full\n---\n# Options\n## O1 X {stage=2}\n');
+  assert.deepEqual(space.meta.extra, [['stages', 'Pilot, Rollout, Full']]);
+  assert.deepEqual(space.options[0].tags, ['stage=2']);
+  assert.ok(report.some((r) => /Unknown tag "stage=2" kept/.test(r.message)));
 });

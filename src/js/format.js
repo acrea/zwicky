@@ -6,15 +6,13 @@ import {
   FORMAT_VERSION,
   DEFAULT_SCALE,
   MARKS,
-  STAGES,
-  DEFAULT_STAGE_NAMES,
-  cleanStageName,
   createSpace,
   createDimension,
   createParameter,
   createOption,
   createCriterion,
   clampWeight,
+  canExtend,
   cleanTitle,
   optionKey,
   criterionKey,
@@ -29,7 +27,7 @@ const SECTION_TITLES = {
   ratings: 'Ratings',
   notes: 'Notes',
 };
-const KNOWN_META = ['zwicky', 'title', 'scale', 'stages', 'updated'];
+const KNOWN_META = ['zwicky', 'title', 'scale', 'updated'];
 const SUB_SEPARATOR = ' › ';
 
 // ---------------------------------------------------------------- helpers
@@ -201,13 +199,6 @@ function parseBody(lines, report) {
           space.meta.scale = { ...DEFAULT_SCALE };
           add(ln, 'warning', `Scale "${kv.value}" is not "<min>-<max>"; using ${DEFAULT_SCALE.min}-${DEFAULT_SCALE.max}.`);
         }
-      } else if (key === 'stages') {
-        const names = kv.value.split(',').map(cleanStageName);
-        if (names.length > STAGES.length)
-          add(ln, 'warning', `Only ${STAGES.length} stages are supported; "${names.slice(STAGES.length).join(', ')}" dropped.`);
-        space.meta.stages = DEFAULT_STAGE_NAMES.map((d, i) => names[i] || d);
-        if (names.slice(0, STAGES.length).some((n) => !n) || names.length < STAGES.length)
-          add(ln, 'info', `Missing stage names filled in with the defaults: ${space.meta.stages.join(', ')}.`);
       } else {
         const existing = space.meta.extra.find((e) => e[0] === key);
         if (existing) existing[1] = kv.value;
@@ -238,6 +229,7 @@ function parseBody(lines, report) {
   const optionRecs = [];
   const criterionRecs = [];
   const pickRefs = []; // { param, id, line }
+  const extendRefs = []; // { option, id, line }
   const ratingBlocks = [];
 
   const setTarget = (t) => {
@@ -346,12 +338,10 @@ function parseBody(lines, report) {
         const item = section === 'options' ? createOption(null, title) : createCriterion(null, title);
         for (const tok of tokens) {
           const w = /^w=(-?\d+)$/.exec(tok);
-          const st = /^stage=(\d+)$/.exec(tok);
-          if (section === 'options' && st && STAGES.includes(Number(st[1])) && !item.stage) {
-            item.stage = Number(st[1]);
-          } else if (section === 'options' && st && !STAGES.includes(Number(st[1]))) {
-            item.tags.push(tok);
-            add(ln, 'warning', `Stage ${st[1]} does not exist (only 1–${STAGES.length}); "${tok}" kept as an unknown tag.`);
+          const ext = /^extends=O(\d+)$/.exec(tok);
+          if (section === 'options' && ext) {
+            if (extendRefs.some((r) => r.option === item)) add(ln, 'warning', `Option extends more than one option; "${tok}" dropped.`);
+            else extendRefs.push({ option: item, id: Number(ext[1]), line: ln });
           } else if (section === 'criteria' && w) {
             const weight = clampWeight(Number(w[1]));
             if (weight !== Number(w[1])) add(ln, 'warning', `Weight ${w[1]} is outside 0–10; set to ${weight}.`);
@@ -511,6 +501,13 @@ function parseBody(lines, report) {
   }
   for (const d of space.dims) for (const p of d.params) p.picks.sort((a, b) => a - b);
 
+  for (const ref of extendRefs) {
+    if (!optionIds.has(ref.id)) add(ref.line, 'warning', `Unknown option O${ref.id}; "extends" dropped.`);
+    else if (!canExtend(space, ref.option.id, ref.id))
+      add(ref.line, 'warning', `O${ref.option.id} cannot extend O${ref.id} (an option cannot extend itself or its own extension); "extends" dropped.`);
+    else ref.option.extends = ref.id;
+  }
+
   // ---- ratings
   const { min, max } = space.meta.scale;
   for (const block of ratingBlocks) {
@@ -578,8 +575,6 @@ export function serialize(space) {
   if (title) out.push(`title: ${title}`);
   const scale = meta.scale || DEFAULT_SCALE;
   out.push(`scale: ${scale.min}-${scale.max}`);
-  const stages = DEFAULT_STAGE_NAMES.map((d, i) => cleanStageName((meta.stages || [])[i]) || d);
-  if (stages.some((n, i) => n !== DEFAULT_STAGE_NAMES[i])) out.push(`stages: ${stages.join(', ')}`);
   const updated = cleanValue(meta.updated);
   if (updated) out.push(`updated: ${updated}`);
   for (const [k, v] of meta.extra || []) {
@@ -627,7 +622,8 @@ export function serialize(space) {
   if (space.options.length) {
     heading('# Options');
     for (const o of space.options) {
-      heading(itemLine('## O' + o.id, o.title, STAGES.includes(o.stage) ? ['stage=' + o.stage, ...o.tags] : o.tags));
+      const ext = o.extends !== null && optionIds.has(o.extends) ? ['extends=O' + o.extends] : [];
+      heading(itemLine('## O' + o.id, o.title, [...ext, ...o.tags]));
       note(o.note, '');
     }
   }

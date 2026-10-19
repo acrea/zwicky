@@ -34,10 +34,10 @@ owner: Dennis
 
 # Options
 
-## O1 First option {stage=2}
+## O1 First option
 > Note of the first option.
 
-## O2 Second option {stage=4}
+## O2 Second option {extends=O1}
 
 ## O3 Duplicate second
 

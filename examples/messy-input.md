@@ -36,10 +36,10 @@ This stray paragraph cannot be placed.
 - External
 > Unindented note after a blank line.
 # Options
-## O1 First option {stage=2}
+## O1 First option {extends=O1}
 > Note of the first option.
-## O2 Second option {stage=4}
-## O2 Duplicate second
+## O2 Second option {extends=O1 extends=O3}
+## O2 Duplicate second {extends=O9}
 ## Untitled idea
 # Criteria
 

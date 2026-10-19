@@ -24,16 +24,19 @@ import {
   scoreOption,
   rankOptions,
   scoreFraction,
-  optionColour,
+  colourSlot,
   optionProfile,
   rowLetter,
   coordinate,
   nodeHasContent,
   clampAllScores,
   clone,
-  setStage,
-  stageName,
-  inScope,
+  baseChain,
+  optionLook,
+  canExtend,
+  setExtends,
+  extendOption,
+  extensionsOf,
 } from '../src/js/model.js';
 
 const car = () => parse(readFileSync(new URL('../examples/car-concept.zwicky.md', import.meta.url), 'utf8')).space;
@@ -57,6 +60,8 @@ test('weighted score and rank of the car concept demo', () => {
     [
       [1, 3.8, 0, 1],
       [2, 3.3, 0, 2],
+      [4, null, 3, null],
+      [5, null, 3, null],
       [3, 3.2, 1, 3],
     ],
   );
@@ -160,6 +165,12 @@ test('deleting an option removes its picks and ratings', () => {
   assert.ok(s.ratings.O2);
 });
 
+test('deleting an option turns its direct extensions into options of their own', () => {
+  const s = car();
+  removeOption(s, 4);
+  assert.deepEqual(s.options.map((o) => [o.id, o.extends]), [[1, null], [2, null], [5, null], [3, null]]);
+});
+
 test('deleting a criterion removes its ratings', () => {
   const s = car();
   removeCriterion(s, 3);
@@ -167,27 +178,25 @@ test('deleting a criterion removes its ratings', () => {
   assert.equal(s.ratings.O1.C1.score, 4);
 });
 
-test('duplicating an option copies title, note, picks and ratings', () => {
+test('duplicating an option copies title, note, link, picks and ratings', () => {
   const s = car();
   const copy = duplicateOption(s, 2);
-  assert.equal(copy.id, 4);
+  assert.equal(copy.id, 6);
   assert.deepEqual(
     s.options.map((o) => o.id),
-    [1, 2, 4, 3],
+    [1, 2, 6, 4, 5, 3],
   );
   assert.deepEqual(
-    optionProfile(s, 4).map((r) => r.params.map((p) => p.title)),
+    optionProfile(s, 6).map((r) => r.params.map((p) => p.title)),
     optionProfile(s, 2).map((r) => r.params.map((p) => p.title)),
   );
-  assert.deepEqual(s.ratings.O4, s.ratings.O2);
-  assert.notEqual(s.ratings.O4, s.ratings.O2);
+  assert.deepEqual(s.ratings.O6, s.ratings.O2);
+  assert.notEqual(s.ratings.O6, s.ratings.O2);
+  assert.equal(duplicateOption(s, 5).extends, 4, 'a copy of an extension extends the same option');
 });
 
-test('option colours: stable by id, O9 wraps to colour 1 with the next line style', () => {
-  assert.deepEqual(optionColour(1), { colour: 1, style: 0 });
-  assert.deepEqual(optionColour(8), { colour: 8, style: 0 });
-  assert.deepEqual(optionColour(9), { colour: 1, style: 1 });
-  assert.deepEqual(optionColour(17), { colour: 1, style: 2 });
+test('option colours: stable by id, from O9 on they repeat', () => {
+  assert.deepEqual([1, 8, 9, 17].map(colourSlot), [1, 8, 1, 1]);
 });
 
 test('option profile lists picks and fixed parameters per dimension, including empty ones', () => {
@@ -339,27 +348,49 @@ test('clone is deep and JSON-safe', () => {
   assert.notEqual(s.dims[0].params[0].title, 'changed');
 });
 
-// ---------------------------------------------------------------- stages
+// ---------------------------------------------------------------- extensions
 
-test('option stages: set, clear, duplicated with the option', () => {
-  const s = createSpace();
-  const o = addOption(s, 'x');
-  setStage(o, 2);
-  assert.equal(o.stage, 2);
-  assert.equal(duplicateOption(s, o.id).stage, 2);
-  setStage(o, 4);
-  assert.equal(o.stage, null);
+test('the car demo: O4 extends O2, O5 extends O4; extensions take the colour of their first option', () => {
+  const s = car();
+  assert.deepEqual(baseChain(s, 5).map((o) => o.id), [4, 2]);
+  assert.deepEqual(baseChain(s, 2), []);
+  assert.deepEqual([1, 2, 4, 5].map((id) => optionLook(s, id)), [
+    { colour: 1, depth: 0 },
+    { colour: 2, depth: 0 },
+    { colour: 2, depth: 1 },
+    { colour: 2, depth: 2 },
+  ]);
+  assert.deepEqual(extensionsOf(s, 2).map((o) => o.id), [4, 5]);
+  assert.deepEqual(extensionsOf(s, 4).map((o) => o.id), [5]);
 });
 
-test('stage names and the scope filter', () => {
-  const s = createSpace();
-  assert.deepEqual([1, 2, 3].map((n) => stageName(s, n)), ['Horizon 1', 'Horizon 2', 'Horizon 3']);
-  s.meta.stages = ['Pilot', '  ', 'Full'];
-  assert.deepEqual([1, 2, 3].map((n) => stageName(s, n)), ['Pilot', 'Horizon 2', 'Full']);
-  assert.equal(inScope(null, null), true);
-  assert.equal(inScope(3, null), true);
-  assert.equal(inScope(1, 2), true);
-  assert.equal(inScope(2, 2), true);
-  assert.equal(inScope(3, 2), false);
-  assert.equal(inScope(null, 2), false);
+test('links cannot point to the option itself, a missing option, or make a loop', () => {
+  const s = car();
+  assert.equal(canExtend(s, 2, 2), false);
+  assert.equal(canExtend(s, 2, 9), false);
+  assert.equal(canExtend(s, 2, 5), false, 'O5 already extends O2 through O4');
+  assert.equal(canExtend(s, 1, 5), true);
+  assert.equal(canExtend(s, 2, null), true);
+  assert.equal(setExtends(s, 2, 5), false);
+  assert.equal(s.options.find((o) => o.id === 2).extends, null);
+  assert.equal(setExtends(s, 5, null), true);
+  assert.deepEqual(optionLook(s, 5), { colour: 5, depth: 0 });
+});
+
+test('extending an option starts a new option with its picks, after its existing extensions', () => {
+  const s = car();
+  const ext = extendOption(s, 2);
+  assert.equal(ext.id, 6);
+  assert.equal(ext.extends, 2);
+  assert.equal(ext.title, '');
+  assert.deepEqual(s.options.map((o) => o.id), [1, 2, 4, 5, 6, 3]);
+  assert.deepEqual(
+    optionProfile(s, 6).map((r) => r.params.map((p) => p.title)),
+    optionProfile(s, 2).map((r) => r.params.map((p) => p.title)),
+  );
+  assert.equal(s.ratings.O6, undefined, 'an extension starts unrated');
+  const ext2 = extendOption(s, 1);
+  assert.deepEqual(s.options.map((o) => o.id), [1, 7, 2, 4, 5, 6, 3]);
+  assert.equal(ext2.extends, 1);
+  assert.equal(extendOption(s, 99), null);
 });

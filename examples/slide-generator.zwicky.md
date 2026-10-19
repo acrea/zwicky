@@ -96,8 +96,8 @@ scale: 1-5
 
 # Options
 
-## O1 Copilot-Erweiterung für einzelne Slides {stage=1}
+## O1 Copilot-Erweiterung für einzelne Slides
 > Klein starten: einzelne Slides direkt in PowerPoint, aus Prompt und bestehender PPT.
 
-## O2 Geführter Assistent im Browser {stage=2}
+## O2 Geführter Assistent im Browser
 > Ganze Präsentationen aus mehreren Quellen, Schritt für Schritt mit dem Assistant.
