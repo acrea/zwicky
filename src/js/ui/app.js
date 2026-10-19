@@ -2,6 +2,7 @@
 
 import { h, clear, isTextInput, isMac } from './dom.js';
 import { parse, serialize, fileName as defaultFileName } from '../format.js';
+import { shareLink, sharePayload, decodeShare, LONG_LINK } from '../share.js';
 import { createSpace, findOption, findNode, cleanTitle, addParameter, addDimension, toggleMark, togglePick } from '../model.js';
 import { createHistory } from '../history.js';
 import * as store from '../store.js';
@@ -33,6 +34,8 @@ const TABS = [
   ['evaluation', 'Evaluation'],
 ];
 const MOD = isMac() ? '⌘' : 'Ctrl';
+// Where share links point when this copy runs from a file (a file:// link only works on this computer).
+const HOSTED_URL = 'https://acrea.github.io/zwicky/';
 
 // ---------------------------------------------------------------- state
 
@@ -425,6 +428,7 @@ function buildShell() {
     { label: 'Save', shortcut: `${MOD}+S`, action: () => app.save(false) },
     { label: 'Save as …', shortcut: `${MOD}+Shift+S`, action: () => app.save(true) },
     { label: 'Copy as Markdown', action: () => app.copyMarkdown() },
+    { label: 'Copy link to this space', action: () => app.copyLink() },
     'sep',
     { label: 'Print / PDF …', action: () => window.print() },
   ]);
@@ -879,6 +883,75 @@ app.copyMarkdown = async () => {
   app.toast(ok ? 'Copied the space as Markdown.' : 'Copying failed. Use Save instead.');
 };
 
+// ---------------------------------------------------------------- share links (#z=…)
+
+/** Copies a link that opens this space. The link is the data: anyone who has it can read the space. */
+app.copyLink = async () => {
+  if (app.state.editing) app.finishEdit(document.querySelector('.inline-edit')?.value ?? null);
+  let base = location.href;
+  if (!/^https?:$/.test(location.protocol)) {
+    const ok = await app.confirm(
+      'Copy a link to the hosted zwicky?',
+      `This copy of zwicky runs from a file, so a link to it would only work on this computer. The link can open the space in the hosted zwicky at ${HOSTED_URL} instead.`,
+      'Copy hosted link',
+    );
+    if (!ok) return;
+    base = HOSTED_URL;
+  }
+  const link = await shareLink(base, serialize(app.space));
+  const length = link.length.toLocaleString('en-US');
+  if (link.length > LONG_LINK) {
+    const ok = await app.confirm(
+      'This link is long',
+      `It has ${length} characters. Some mail clients, chat apps and ticket systems cut long links off, and the space would not open. For a space this size, sending the .zwicky.md file is safer.`,
+      'Copy anyway',
+    );
+    if (!ok) return;
+  }
+  const ok = await store.copyText(link);
+  app.toast(ok ? `Copied a link (${length} characters). Anyone who has it can read this space.` : 'Copying failed. Use Save instead.');
+};
+
+/** Removes the #z=… fragment, so a reload does not open the link again over later edits. */
+function clearShareFragment() {
+  try {
+    history.replaceState(null, '', location.href.split('#')[0]);
+  } catch {
+    location.hash = '';
+  }
+}
+
+let openingLink = false;
+
+/** Opens the space in a #z=… link, like an opened file: asks before replacing unsaved work, shows the report. */
+async function openShareLink() {
+  const payload = sharePayload(location.hash);
+  if (payload === null || openingLink) return;
+  openingLink = true;
+  clearShareFragment();
+  try {
+    let markdown;
+    try {
+      markdown = await decodeShare(payload);
+    } catch (err) {
+      app.alert(
+        'Cannot open this link',
+        err.kind === 'version'
+          ? `${err.message} Please use a newer zwicky, or ask for the .zwicky.md file.`
+          : 'This link is incomplete or damaged; perhaps it was cut off when it was sent. Ask for the .zwicky.md file instead.',
+      );
+      return;
+    }
+    if (!(await confirmDiscard())) return;
+    // a shared space is not saved anywhere on this computer yet
+    openText(markdown, { name: '', dirty: true });
+  } finally {
+    openingLink = false;
+  }
+}
+
+window.addEventListener('hashchange', openShareLink);
+
 app.help = () => {
   const keys = h('dl', { class: 'shortcuts' });
   for (const [k, d] of SHORTCUTS) keys.append(h('dt', null, k.replace(/Ctrl/g, MOD)), h('dd', null, d));
@@ -926,6 +999,12 @@ app.help = () => {
       ),
       h('div', { class: 'insp-actions' }, copySpec, showSpec),
       spec,
+      h('h3', null, 'Share as a link'),
+      h(
+        'p',
+        null,
+        'File → Copy link to this space puts the whole space into a link: whoever opens it gets a copy in their own zwicky. The link is the data, so anyone who has it can read the space; do not post links to sensitive spaces in public channels. A link is a snapshot: later edits on either side do not flow back. Very long links can be cut off by mail or chat apps; send the .zwicky.md file then.',
+      ),
       h('h3', null, 'Where your data lives'),
       h('p', null, 'zwicky runs entirely in your browser and makes no network requests. The open space is kept in this browser’s cache so a reload does not lose it. That cache is a convenience, not a backup: clearing site data, a private window or another browser loses it. Save your space to a .zwicky.md file.'),
       offline,
@@ -1056,6 +1135,7 @@ function start() {
   const space = saved && parse(saved.markdown).space;
   if (space) loadSpace(space, { fileName: saved.fileName, dirty: saved.dirty });
   else openText(EXAMPLES['car-concept.zwicky.md'], { name: '' });
+  openShareLink();
 }
 
 start();

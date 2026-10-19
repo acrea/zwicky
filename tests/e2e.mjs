@@ -605,6 +605,71 @@ await check('the View menu offers density and coordinates, no theme switch', asy
   await page.getByRole('menuitemradio', { name: 'Normal' }).click();
 });
 
+let sharedLink = '';
+
+await check('Copy link: running from a file, the link points to the hosted zwicky and carries the space', async () => {
+  await z(() => {
+    window.__copied = null;
+    navigator.clipboard.writeText = async (text) => {
+      window.__copied = text;
+    };
+  });
+  await page.locator('.menu-btn', { hasText: 'File' }).click();
+  await page.getByRole('menuitem', { name: 'Copy link to this space' }).click();
+  await page.locator('dialog[open]', { hasText: 'Copy a link to the hosted zwicky?' }).waitFor();
+  await page.getByRole('button', { name: 'Copy hosted link' }).click();
+  await page.waitForFunction(() => window.__copied);
+  sharedLink = await z(() => window.__copied);
+  assert.match(sharedLink, /^https:\/\/acrea\.github\.io\/zwicky\/#z=1\.[A-Za-z0-9_-]+$/);
+  assert.match(await page.locator('.toast').innerText(), /Copied a link \([\d,]+ characters\)\. Anyone who has it can read this space\./);
+});
+
+await check('opening a link loads the space like a file, asks before replacing unsaved work, and clears the fragment', async () => {
+  const expected = await md();
+  const tab = await context.newPage();
+  tab.on('pageerror', (e) => errors.push('second tab: ' + e.message));
+  await tab.goto(URL_ + '#' + sharedLink.split('#')[1]);
+  // the first tab left unsaved changes in the shared browser cache
+  await tab.locator('dialog[open]', { hasText: 'Discard unsaved changes?' }).waitFor();
+  await tab.locator('dialog[open] .btn.danger').click();
+  await tab.waitForFunction((f) => window.zwicky.markdown() === f, expected, { timeout: 5000 });
+  assert.equal(await tab.evaluate(() => location.hash), '', 'the fragment is gone, so a reload does not import again');
+  assert.equal(await tab.locator('.status.dirty').count(), 1, 'a shared space is not saved here yet');
+  assert.equal(await tab.locator('dialog[open]').count(), 0, 'no import report for a clean link');
+
+  // a damaged link pasted into the open tab: a clear message, nothing changes
+  await tab.evaluate(() => (location.hash = '#z=1.' + 'AbCd'.repeat(20)));
+  await tab.locator('dialog[open]', { hasText: 'Cannot open this link' }).waitFor();
+  assert.match(await tab.locator('dialog[open]').innerText(), /incomplete or damaged/);
+  await tab.keyboard.press('Escape');
+  assert.equal(await tab.evaluate(() => window.zwicky.markdown()), expected);
+  assert.equal(await tab.evaluate(() => location.hash), '');
+
+  // a link to the same space, pasted while the space is unchanged and saved: no question asked
+  await tab.evaluate(() => (window.zwicky.state.dirty = false));
+  await tab.evaluate((h) => (location.hash = h), '#' + sharedLink.split('#')[1]);
+  await tab.waitForFunction(() => location.hash === '');
+  assert.equal(await tab.locator('dialog[open]').count(), 0);
+  await tab.close();
+});
+
+await check('a very long link warns before copying', async () => {
+  await z(() => {
+    window.__copied = null;
+    let seed = 1;
+    const rnd = () => (seed = (seed * 16807) % 2147483647).toString(36);
+    window.zwicky.space.passthrough = Array.from({ length: 3000 }, rnd); // hardly compressible
+  });
+  await page.locator('.menu-btn', { hasText: 'File' }).click();
+  await page.getByRole('menuitem', { name: 'Copy link to this space' }).click();
+  await page.getByRole('button', { name: 'Copy hosted link' }).click();
+  await page.locator('dialog[open]', { hasText: 'This link is long' }).waitFor();
+  assert.match(await page.locator('dialog[open]').innerText(), /It has [\d,]+ characters/);
+  await page.getByRole('button', { name: 'Cancel' }).click();
+  assert.equal(await z(() => window.__copied), null, 'nothing copied');
+  await z(() => (window.zwicky.space.passthrough = []));
+});
+
 await check('a cached space from zwicky 1.x is dropped quietly; the demo opens', async () => {
   await z(() => localStorage.setItem('zwicky.autosave', JSON.stringify({ markdown: '---\nzwicky: 1\ntitle: Old\n---\n# Problem\n', fileName: 'old.zwicky.md', dirty: true })));
   await page.reload();

@@ -18,6 +18,8 @@ A workshop does not ask "is this part of the problem or of the solution?", but "
 
 Options are numbered in their order: drag a chip to reorder them, and every number follows (picks, ratings, links); each option keeps its colour. Every item (dimension, parameter, option, criterion, rating) can hold a plain-text note. Select something to edit it in the inspector on the right (`I` shows or hides it). Press `?` for help, the keyboard shortcuts and the examples.
 
+**Share as a link.** *File → Copy link to this space* puts the whole space into a link (compressed, in the part after `#`, which browsers never send to a server). Whoever opens it gets a copy in their own zwicky. The link *is* the data: anyone who has it can read the space. When zwicky runs from a file, the link points to the hosted app at <https://acrea.github.io/zwicky/>. Very long links (over 8,000 characters) get a warning, because some mail and chat apps cut them off; send the `.zwicky.md` file then.
+
 **Print / PDF** prints the box and the evaluation, each on its own landscape page, with notes as numbered footnotes, ready to drop into a slide deck.
 
 ### Keyboard
@@ -102,6 +104,7 @@ node tests/e2e.mjs   # optional browser checks; needs Playwright (npm i -g playw
 | `src/js/format.js` | `parse(markdown) → { space, report }`, `serialize(space) → markdown` |
 | `src/js/model.js` | Data model, ids, invariants, scoring and ranking |
 | `src/js/history.js`, `src/js/store.js` | Undo/redo snapshots; autosave, open/save, clipboard |
+| `src/js/share.js` | Share links: `encodeShare` / `decodeShare` of a space in the URL fragment `#z=1.<data>` |
 | `src/js/ui/` | The interface: `app.js` (shell), `grid.js`, `paths.js`, `options-bar.js`, `evaluation.js`, `inspector.js`, `print.js` |
 | `src/css/base.css`, `src/css/print.css` | Layout and components, using theme tokens only |
 | `src/themes/dm.css` | The theme: every colour, font and spacing value as a CSS token. Change the look here. |
