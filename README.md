@@ -13,7 +13,7 @@ Or open [`dist/zwicky.html`](dist/zwicky.html) in a current browser. That one fi
 A workshop does not ask "is this part of the problem or of the solution?", but "is this **open**, **fixed** or **out**?". The frame of the problem lives in three places: the **problem statement** above the box (the goal), the **marks** on the box's parameters (the frame), and the **criteria** in the Evaluation tab (the yardstick).
 
 1. **Box.** Write the problem statement, then lay out the box as dimensions (rows) × parameters (cells). Mark a parameter **fixed** (`F`) when it is already decided, e.g. "Hosting: Swiss Residency": every option has it. Mark it **out** (`X`) when it is excluded. Use the parameter's note to say why, and who decided. A dimension with a single open parameter is often a constraint in disguise; the inspector suggests marking it fixed.
-2. **Options.** Add options, click an option's chip, then click the open parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through its picks and every fixed parameter; *Compare* draws all options at once, and *Line styles* adds dash patterns for greyscale printing. In the option's inspector, set its stage (Horizon 1–3 by default, renamable); *Scope up to* greys out the options of later stages.
+2. **Options.** Add options, click an option's chip, then click the open parameters it picks: 0, 1 or several per dimension. The active option is drawn as a path through its picks and every fixed parameter; *Compare* draws all options at once. To plan a solution in steps, select an option and press *Extend* in the inspector: the extension starts with the same picks, is drawn in the same colour with a dashed path (a second extension: dotted), and its profile in the Evaluation tab highlights what it adds.
 3. **Evaluation.** Compare the options' profiles side by side, add criteria with weights (0–10), and rate every option against every criterion. Every rating can carry a note with the rationale or assumption. zwicky computes the weighted score and the rank.
 
 Every item (dimension, parameter, option, criterion, rating) can hold a plain-text note. Select something to edit it in the inspector on the right (`I` shows or hides it). Press `?` for help, the keyboard shortcuts and the examples.
@@ -68,9 +68,11 @@ scale: 1-5
 
 # Options
 
-## O1 Athletic hybrid SUV {stage=3}
+## O1 Athletic hybrid SUV
 
-## O2 City coupé {stage=1}
+## O2 City coupé
+
+## O3 City coupé with rail partnership {extends=O2}
 
 # Criteria
 

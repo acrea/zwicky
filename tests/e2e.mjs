@@ -56,6 +56,7 @@ await page.waitForSelector('.grid');
 
 const dim = (title) => page.locator('.cell.dim', { has: page.locator('.title', { hasText: new RegExp(`^${title}$`) }) });
 const param = (s, title) => s.dims.flatMap((d) => d.params).find((p) => p.title === title);
+const chip = (id) => page.locator(`.chip[data-id="${id}"]`);
 const has = (title, cls) => cell(title).evaluate((el, c) => el.classList.contains(c), cls);
 
 await check('loads the car concept demo on first launch, on the Box tab', async () => {
@@ -84,16 +85,16 @@ await check('marking a picked parameter out asks first; cancel keeps it, confirm
   await cell('Electric').click();
   await page.keyboard.press('x');
   await page.locator('dialog[open]').waitFor();
-  assert.match(await page.locator('dialog[open]').innerText(), /picked by O2/);
+  assert.match(await page.locator('dialog[open]').innerText(), /picked by O2, O4, O5/);
   await page.keyboard.press('Escape');
   await page.locator('dialog[open]').waitFor({ state: 'detached' });
-  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2]]);
+  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2, 4, 5]]);
   await page.keyboard.press('x');
   await page.getByRole('button', { name: 'Mark as out' }).click();
   await page.waitForFunction(() => window.zwicky.markdown().includes('- Electric {out}'));
   assert.deepEqual(param(await space(), 'Electric').picks, []);
   await page.keyboard.press('Control+z');
-  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2]]);
+  assert.deepEqual([param(await space(), 'Electric').mark, param(await space(), 'Electric').picks], [null, [2, 4, 5]]);
 });
 
 await check('marking a picked parameter fixed needs no confirm: every option has it now', async () => {
@@ -239,7 +240,7 @@ await check('O1 is active and drawn as a path through its picks and every fixed 
 });
 
 await check('chip click enters pick mode; clicking cells toggles picks; marked cells refuse', async () => {
-  await page.locator('.chip', { hasText: 'City coupé' }).click();
+  await chip(2).click();
   assert.equal(await page.locator('.pick-hint').count(), 1);
   await cell('sporty').click();
   assert.deepEqual(param(await space(), 'sporty').picks, [2]);
@@ -260,13 +261,20 @@ await check('digit keys toggle picks for O1–O9', async () => {
   assert.equal(await cell('slim').locator('.marker').innerText(), '3');
 });
 
-await check('compare draws every option; line styles add dashes', async () => {
+await check('compare draws every option; extensions are dashed, then dotted, in the colour they start from', async () => {
   await page.getByRole('button', { name: 'Compare' }).click();
-  assert.equal(await page.locator('svg.paths g.path').count(), 3);
-  await page.getByRole('button', { name: 'Line styles' }).click();
-  assert.ok((await page.locator('svg.paths polyline[stroke-dasharray]').count()) >= 2);
+  assert.equal(await page.locator('svg.paths g.path').count(), 5);
+  const dashes = await page.locator('svg.paths polyline').evaluateAll((els) => els.map((el) => el.getAttribute('stroke-dasharray')).filter(Boolean));
+  assert.deepEqual(dashes.sort(), ['1.5 4', '6 4'], 'O4 dashed, O5 dotted');
+  const colours = await z(() => [...document.querySelectorAll('.chip[data-id]')].map((c) => [c.dataset.id, c.style.getPropertyValue('--opt')]));
+  const colour = Object.fromEntries(colours);
+  assert.equal(colour['4'], colour['2']);
+  assert.equal(colour['5'], colour['2']);
+  assert.notEqual(colour['1'], colour['2']);
+  assert.match(await chip(4).innerText(), /↳ O2/);
+  assert.match(await chip(5).innerText(), /↳ O4/);
   await page.getByRole('button', { name: 'Compare' }).click();
-  await page.getByRole('button', { name: 'Line styles' }).click();
+  assert.equal(await page.getByRole('button', { name: 'Line styles' }).count(), 0);
 });
 
 await check('+ Option, rename in the inspector, duplicate and delete', async () => {
@@ -275,23 +283,23 @@ await check('+ Option, rename in the inspector, duplicate and delete', async () 
   await page.keyboard.press('Enter');
   // the chip label updates on the next animation frame, so wait for it
   await page.locator('.chip', { hasText: 'Robo taxi' }).waitFor({ timeout: 5000 });
-  assert.match(await page.locator('.chip', { hasText: 'O4' }).innerText(), /Robo taxi/);
+  assert.match(await chip(6).innerText(), /Robo taxi/);
   await page.keyboard.press('Escape'); // leave pick mode, so a click only selects
   await cell('Electric').click();
-  await page.keyboard.press('4');
-  await page.locator('.chip', { hasText: 'O4' }).click();
+  await page.keyboard.press('6');
+  await chip(6).click();
   await page.getByRole('button', { name: 'Duplicate' }).click();
   await page.keyboard.press('Enter');
   const s = await space();
-  assert.deepEqual(s.options.map((o) => o.id), [1, 2, 3, 4, 5], 'after duplicate: ' + JSON.stringify(s.options.map((o) => o.id)));
-  assert.ok(param(s, 'Electric').picks.includes(5));
-  await page.locator('.chip', { hasText: 'O5' }).click();
+  assert.deepEqual(s.options.map((o) => o.id), [1, 2, 4, 5, 3, 6, 7], 'after duplicate: ' + JSON.stringify(s.options.map((o) => o.id)));
+  assert.ok(param(s, 'Electric').picks.includes(7));
+  await chip(7).click();
   await page.getByRole('button', { name: 'Delete option' }).click();
   await page.locator('dialog[open] .btn.danger').click();
-  await page.waitForFunction(() => window.zwicky.space.options.length === 4); // the dialog closes asynchronously
+  await page.waitForFunction(() => window.zwicky.space.options.length === 6); // the dialog closes asynchronously
   const s2 = await space();
-  assert.deepEqual(s2.options.map((o) => o.id), [1, 2, 3, 4], 'after delete: ' + JSON.stringify(s2.options.map((o) => o.id)));
-  assert.ok(!param(s2, 'Electric').picks.includes(5));
+  assert.deepEqual(s2.options.map((o) => o.id), [1, 2, 4, 5, 3, 6], 'after delete: ' + JSON.stringify(s2.options.map((o) => o.id)));
+  assert.ok(!param(s2, 'Electric').picks.includes(7));
 });
 
 await check('evaluation: profiles list picks per dimension, fixed parameters for every option', async () => {
@@ -302,6 +310,12 @@ await check('evaluation: profiles list picks per dimension, fixed parameters for
   const platform = page.locator('.profile-table tbody tr', { hasText: 'Platform' });
   assert.equal(await platform.locator('li.fixed', { hasText: 'Existing platform' }).count(), cols);
   assert.match(await page.locator('.profile-table tbody tr', { hasText: 'Front design' }).innerText(), /athletic/);
+});
+
+await check('evaluation: the profile of an extension highlights what it adds to the option it extends', async () => {
+  const added = await page.locator('.profile-table li.added').allInnerTexts();
+  assert.deepEqual(added.sort(), ['5', 'Rail partnership for long distance', 'WOOPIEs']);
+  assert.match(await page.locator('.profile-table thead .opt-head[data-option="5"]').innerText(), /↳ O4/);
 });
 
 await check('evaluation: digits score, weights and totals update, Delete clears', async () => {
@@ -403,48 +417,45 @@ await check('save falls back to a download with the canonical file', async () =>
   assert.equal(await page.locator('.status.dirty').count(), 0);
 });
 
-await check('legend explains fixed, out and the stages; the scope filter greys out options only', async () => {
+await check('legend explains fixed, out, paths and extensions; there is no scope filter', async () => {
   await page.click('#tab-box');
   const legend = await page.locator('.legend').innerText();
-  for (const t of ['Rows', 'Cells', 'Fixed', 'Out', 'Paths', 'Horizon 1', 'Horizon 2', 'Horizon 3']) assert.ok(legend.includes(t), t);
-  const chipBeyond = (id) => page.locator('.chip', { hasText: id }).evaluate((el) => el.classList.contains('beyond-scope'));
-  await page.locator('.scope-filter').getByRole('button', { name: 'Horizon 2' }).click();
-  assert.equal(await chipBeyond('O1'), true, 'O1 belongs to stage 3');
-  assert.equal(await chipBeyond('O2'), false);
-  assert.match(await page.locator('.chip', { hasText: 'O2' }).innerText(), /Horizon 1/);
-  assert.equal(await page.locator('.cell.beyond-scope').count(), 0, 'parameters have no stage');
-  await page.locator('.scope-filter').getByRole('button', { name: 'Horizon 1' }).click();
-  assert.equal(await cell('Diesel').locator('.marker').count(), 0, 'markers of O3 (stage 2) are hidden');
-  await page.locator('.scope-filter').getByRole('button', { name: 'All' }).click();
-  assert.equal(await chipBeyond('O1'), false);
-  assert.equal(await cell('Diesel').locator('.marker').count(), 1);
+  for (const t of ['Rows', 'Cells', 'Fixed', 'Out', 'Paths', 'Extensions']) assert.ok(legend.includes(t), t);
+  assert.equal(await page.locator('.legend-line').count(), 3);
+  assert.equal(await page.getByText('Scope up to').count(), 0);
+  assert.equal(await page.getByText(/Horizon/).count(), 0);
 });
 
-await check('the stage of an option is set in the inspector and saved as {stage=n}', async () => {
-  await page.locator('.chip', { hasText: 'O2' }).dblclick();
+await check('Extend starts a linked option with the same picks, in pick mode; the link is saved as {extends=O<n>}', async () => {
+  await chip(1).click();
   await page.keyboard.press('Escape');
-  await page.locator('.inspector').getByRole('button', { name: 'Horizon 2' }).click();
-  assert.match(await md(), /## O2 City coupé \{stage=2\}/);
-  await page.locator('.inspector').getByRole('button', { name: 'Horizon 2' }).click();
-  assert.match(await md(), /## O2 City coupé\n/);
-  await page.keyboard.press('Control+z');
-  assert.match(await md(), /## O2 City coupé \{stage=2\}/);
-  await page.keyboard.press('Control+z');
-  assert.match(await md(), /## O2 City coupé \{stage=1\}/);
+  await page.locator('.inspector').getByRole('button', { name: 'Extend', exact: true }).click();
+  await page.waitForFunction(() => window.zwicky.space.options.some((o) => o.extends === 1));
+  const s = await space();
+  const ext = s.options.find((o) => o.extends === 1);
+  assert.equal(ext.id, 7);
+  assert.deepEqual(s.options.map((o) => o.id), [1, 7, 2, 4, 5, 3, 6], 'placed right after O1');
+  assert.ok(param(s, 'athletic').picks.includes(7), 'starts with the picks of O1');
+  assert.equal(await page.locator('.pick-hint').count(), 1, 'pick mode is on');
+  await page.keyboard.type('SUV, second generation');
+  await page.keyboard.press('Enter');
+  assert.match(await md(), /\n## O7 SUV, second generation \{extends=O1\}\n/);
+  assert.match(await chip(7).innerText(), /↳ O1/);
+  await page.keyboard.press('Escape');
 });
 
-await check('renaming the stages updates the legend and the file', async () => {
+await check('the Extends choice links and unlinks an option, and offers no loops', async () => {
+  await chip(2).dblclick();
   await page.keyboard.press('Escape');
-  await page.keyboard.press('Escape');
-  await page.keyboard.press('Escape');
-  const input = page.locator('.inspector input.stage-1');
-  await input.fill('Pilot');
-  await input.blur();
-  await page.waitForTimeout(50);
-  assert.match(await page.locator('.legend').innerText(), /Pilot/);
-  assert.match(await md(), /\nstages: Pilot, Horizon 2, Horizon 3\n/);
+  const values = await page.locator('#inspector-extends option').evaluateAll((els) => els.map((el) => el.value));
+  assert.deepEqual(values, ['', '1', '7', '3', '6'], 'O2 cannot extend O4 or O5, which extend O2');
+  await page.locator('#inspector-extends').selectOption('3');
+  assert.match(await md(), /\n## O2 City coupé \{extends=O3\}\n/);
+  await page.locator('#inspector-extends').selectOption('');
+  assert.match(await md(), /\n## O2 City coupé\n/);
   await page.keyboard.press('Control+z');
-  assert.doesNotMatch(await md(), /stages:/);
+  await page.keyboard.press('Control+z');
+  assert.match(await md(), /\n## O2 City coupé\n/);
 });
 
 await check('every example opens without a report and saves back byte-identically (apart from updated)', async () => {
