@@ -1,4 +1,4 @@
-// Evaluation tab (§3.4): option profiles (read-only) and the rating matrix.
+// Evaluation tab: option profiles (read-only) and the rating matrix.
 
 import { h } from './dom.js';
 import {
@@ -14,10 +14,10 @@ import {
   optionProfile,
   clampWeight,
   criterionKey,
+  isSelected,
 } from '../model.js';
 import { optionVars, selKey, NAV_KEYS } from './grid.js';
-import { swatch } from './options-bar.js';
-import { stagePill, optionBeyondScope, scopeFilter } from './legend.js';
+import { swatch, extendsRef } from './options-bar.js';
 import { field } from './inspector.js';
 
 // ---------------------------------------------------------------- helpers
@@ -30,7 +30,7 @@ export function ordinal(n) {
 
 /** Options in display order: stored order, or by rank (view only). */
 export function displayOptions(app) {
-  const items = app.space.options.items;
+  const items = app.space.options;
   if (!app.state.evalView.sortByRank) return items;
   const ranks = rankOptions(app.space);
   return items
@@ -45,7 +45,7 @@ const parseRating = (sel) => sel.uid.split(':').map(Number);
 /** Navigable cells of the rating matrix, row by row. */
 export function evalLayout(app) {
   const opts = displayOptions(app);
-  const rows = app.space.criteria.items.map((c) => [
+  const rows = app.space.criteria.map((c) => [
     { type: 'crit', uid: String(c.id) },
     { type: 'weight', uid: String(c.id) },
     ...opts.map((o) => ratingSel(c.id, o.id)),
@@ -63,7 +63,7 @@ function scaleValues(scale) {
 function criterionHasContent(space, c) {
   if (c.note) return true;
   const key = criterionKey(c.id);
-  return Object.values(space.ratings.cells).some((row) => row[key]);
+  return Object.values(space.ratings).some((row) => row[key]);
 }
 
 // ---------------------------------------------------------------- render
@@ -79,7 +79,6 @@ export function renderEvalHead(app) {
     toggle('sortByRank', 'Sort options by rank', 'Order the columns by rank. The stored order does not change.'),
     toggle('showNotes', 'Show all notes', 'Show every rating note under its score, for reviews and printing'),
     toggle('heatmap', 'Heatmap', 'Tint scores by value'),
-    scopeFilter(app),
   );
 }
 
@@ -87,14 +86,14 @@ function optionHead(app, o, extra) {
   return h(
     'th',
     {
-      class: ['opt-head', optionBeyondScope(app, o) && 'beyond-scope'],
+      class: 'opt-head',
       scope: 'col',
-      style: optionVars(o.id),
+      style: optionVars(app.space, o.id),
       title: o.note || null,
       dataset: { option: String(o.id) },
     },
-    h('button', { class: 'opt-head-btn', onclick: () => app.inspectOption(o.id) }, swatch(o.id, app.state.lineStyles), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: ['opt-title', !o.title && 'empty'] }, o.title || 'Untitled')),
-    stagePill(app.space, o.stage),
+    h('button', { class: 'opt-head-btn', onclick: () => app.inspectOption(o.id) }, swatch(app.space, o.id), h('span', { class: 'id' }, 'O' + o.id), h('span', { class: ['opt-title', !o.title && 'empty'] }, o.title || 'Untitled')),
+    extendsRef(o),
     extra,
   );
 }
@@ -102,14 +101,14 @@ function optionHead(app, o, extra) {
 export function renderProfiles(app, opts) {
   const { space } = app;
   if (!opts.length) {
-    return h('p', { class: 'empty-state' }, 'No options yet. Compose options in the Solution tab, then compare them here. ', h('button', { class: 'link', onclick: () => app.setTab('solution') }, 'Go to Solution'));
+    return h('p', { class: 'empty-state' }, 'No options yet. Compose options in the Box tab, then compare them here. ', h('button', { class: 'link', onclick: () => app.setTab('box') }, 'Go to Box'));
   }
-  if (!space.solution.dims.length) return h('p', { class: 'empty-state' }, 'The solution space is empty.');
+  if (!space.dims.length) return h('p', { class: 'empty-state' }, 'The box is empty.');
   const profiles = new Map(opts.map((o) => [o.id, optionProfile(space, o.id)]));
   const table = h('table', { class: 'eval-table profile-table' });
   table.append(h('thead', null, h('tr', null, h('th', { class: 'sticky corner', scope: 'col' }, 'Dimension'), opts.map((o) => optionHead(app, o)))));
   const body = h('tbody');
-  space.solution.dims.forEach((dim, r) => {
+  space.dims.forEach((dim, r) => {
     body.append(
       h(
         'tr',
@@ -117,7 +116,11 @@ export function renderProfiles(app, opts) {
         h('th', { class: 'sticky row-head', scope: 'row' }, dim.title || 'Untitled dimension'),
         opts.map((o) => {
           const params = profiles.get(o.id)[r].params;
-          return h('td', { class: !params.length && 'none' }, params.length ? h('ul', null, params.map((p) => h('li', null, p.title || 'Untitled'))) : '—');
+          // an extension highlights what it adds or changes compared to the option it extends
+          const isNew = (p) => o.extends !== null && findOption(space, o.extends) && !isSelected(p, o.extends);
+          const tip = (p) => (p.mark === 'fixed' ? 'Fixed: every option has it' : isNew(p) ? `New compared to O${o.extends}` : null);
+          const item = (p) => h('li', { class: [p.mark === 'fixed' && 'fixed', isNew(p) && 'added'], title: tip(p) }, p.title || 'Untitled');
+          return h('td', { class: !params.length && 'none' }, params.length ? h('ul', null, params.map(item)) : '—');
         }),
       ),
     );
@@ -169,7 +172,7 @@ function renderRatings(app, opts) {
   );
 
   const body = h('tbody');
-  space.criteria.items.forEach((c) => {
+  space.criteria.forEach((c) => {
     const tr = h('tr', { dataset: { crit: String(c.id) } });
     const critSel = { type: 'crit', uid: String(c.id) };
     const editor = inlineEdit(critSel, c.title, 'Criterion');
@@ -197,7 +200,7 @@ function renderRatings(app, opts) {
       const score = r ? r.score : null;
       const note = r ? r.note : '';
       const sel = ratingSel(c.id, o.id);
-      const style = { ...optionVars(o.id) };
+      const style = { ...optionVars(space, o.id) };
       if (v.heatmap && score !== null) style['--heat'] = Math.round(6 + 22 * scoreFraction(score, scale)) + '%';
       tr.append(
         h(
@@ -245,7 +248,7 @@ function renderRatings(app, opts) {
         const r = ranks.get(o.id);
         return h(
           'td',
-          { class: ['total', topRank(o.id) && 'top'], style: optionVars(o.id) },
+          { class: ['total', topRank(o.id) && 'top'], style: optionVars(space, o.id) },
           h('span', { class: 'total-val' }, r.display === null ? '–' : r.display.toFixed(1)),
           h('span', { class: 'bar', 'aria-hidden': 'true' }, h('span', { class: 'bar-fill', style: { width: (scoreFraction(r.score, scale) * 100).toFixed(1) + '%' } })),
         );
@@ -280,7 +283,7 @@ function renderRatings(app, opts) {
 export function renderEvaluation(app) {
   const opts = displayOptions(app);
   const { el: ratings, focusEl } = renderRatings(app, opts);
-  const hint = !app.space.criteria.items.length
+  const hint = !app.space.criteria.length
     ? h('p', { class: 'empty-state' }, 'Add the criteria that describe what a great solution looks like, then rate each option against them.')
     : null;
   const el = h(
@@ -326,7 +329,7 @@ export async function deleteCriterion(app, c) {
 }
 
 function moveCriterion(app, c, dir) {
-  const items = app.space.criteria.items;
+  const items = app.space.criteria;
   const i = items.indexOf(c);
   const j = i + dir;
   if (j >= 0 && j < items.length) app.change(() => moveItem(items, i, j));
@@ -457,7 +460,7 @@ function wireRatings(app, table) {
     clear();
     if (id === null || !tr) return;
     e.preventDefault();
-    const items = app.space.criteria.items;
+    const items = app.space.criteria;
     const from = items.findIndex((c) => c.id === id);
     const r = tr.getBoundingClientRect();
     let to = items.findIndex((c) => c.id === Number(tr.dataset.crit)) + (e.clientY < r.top + r.height / 2 ? 0 : 1);
@@ -674,7 +677,7 @@ export function ratingInspector(app, { criterion: c, option: o }) {
       'dl',
       { class: 'profile rating-ref' },
       h('dt', null, 'Option'),
-      h('dd', { class: 'option-ref' }, swatch(o.id, app.state.lineStyles), h('span', null, `O${o.id} ${o.title || 'Untitled'}`)),
+      h('dd', { class: 'option-ref' }, swatch(space, o.id), h('span', null, `O${o.id} ${o.title || 'Untitled'}`)),
       h('dt', null, 'Criterion'),
       h('dd', null, `C${c.id} ${c.title || 'Untitled'}`, h('span', { class: 'muted' }, ` · weight ${c.weight}`)),
       c.note ? h('dt', null, 'Great means') : null,

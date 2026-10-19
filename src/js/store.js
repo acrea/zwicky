@@ -29,24 +29,6 @@ export function loadAutosave() {
   }
 }
 
-/**
- * Keeps an autosave the app cannot read (e.g. from a newer version) under a
- * separate key instead of overwriting it. Returns the backup key.
- */
-export function backupAutosave() {
-  const ls = storage();
-  if (!ls) return null;
-  try {
-    const raw = ls.getItem(AUTOSAVE_KEY);
-    if (!raw) return null;
-    const key = `${AUTOSAVE_KEY}.backup-${new Date().toISOString()}`;
-    ls.setItem(key, raw);
-    return key;
-  } catch {
-    return null;
-  }
-}
-
 export function writeAutosave(markdown, fileName, dirty) {
   const ls = storage();
   if (!ls) return false;

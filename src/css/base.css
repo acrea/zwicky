@@ -311,7 +311,7 @@ kbd {
   display: flex;
 }
 
-/* key-message band (problem statement) */
+/* key-message band (the problem statement) */
 .note-band {
   display: flex;
   align-items: flex-start;
@@ -357,15 +357,6 @@ kbd {
 }
 .note-band.band:focus-within {
   box-shadow: var(--focus-ring);
-}
-.note-band.intro .band-input {
-  font-size: var(--fs-md);
-  color: var(--ink-muted);
-  font-style: italic;
-}
-.note-band.intro:focus-within .band-input {
-  color: var(--ink);
-  font-style: normal;
 }
 .band-input::placeholder {
   color: var(--ink-faint);
@@ -458,7 +449,7 @@ svg.paths {
   white-space: pre-wrap;
 }
 /* keep titles legible where an option path runs underneath */
-.grid-canvas[data-section='solution'] .cell.param .title {
+.grid-canvas .cell.param .title {
   text-shadow:
     0 0 2px var(--bg),
     0 0 2px var(--bg),
@@ -560,23 +551,23 @@ svg.paths {
   padding-top: 10px;
 }
 
-/* states: selected, stages, out, picked, beyond the scope filter */
-.cell.stage-1 {
-  background: var(--stage-1-bg);
+/* states: selected, fixed, out, picked */
+.cell.mark-fixed {
+  background: var(--mark-fixed-bg);
+  box-shadow: inset 3px 0 0 var(--mark-fixed-rule);
 }
-.cell.stage-1 .title {
+.cell.mark-fixed .title {
+  color: var(--mark-fixed-ink);
   font-weight: 600;
 }
-.cell.stage-2 {
-  background: var(--stage-2-bg);
-}
-.cell.stage-3 {
-  background: var(--stage-3-bg);
-}
-.cell.beyond-scope > :not(.coord),
-.chip.beyond-scope,
-.opt-head.beyond-scope > * {
-  opacity: var(--beyond-scope-opacity);
+.mark-glyph {
+  position: absolute;
+  right: 5px;
+  bottom: 3px;
+  font-family: var(--font-ui);
+  font-size: 9px;
+  line-height: 1;
+  color: var(--mark-fixed-ink);
 }
 .cell.mark-out .title {
   color: var(--mark-out-ink);
@@ -609,6 +600,10 @@ svg.paths {
 }
 .grid.pick-mode .cell.param {
   cursor: copy;
+}
+.grid.pick-mode .cell.param.mark-fixed,
+.grid.pick-mode .cell.param.mark-out {
+  cursor: not-allowed;
 }
 .cell.dragging {
   opacity: 0.4;
@@ -679,7 +674,7 @@ svg.paths {
   font-size: var(--fs-xs);
   color: var(--ink-muted);
 }
-.chip .stage-pill {
+.chip .extends-ref {
   flex-shrink: 0;
 }
 .chip-title {
@@ -894,55 +889,17 @@ textarea.field-input {
   display: flex;
   gap: var(--space-1);
 }
-.stage-choice {
-  flex-wrap: wrap;
-}
-.toggle.stage-1:not([aria-pressed='true']),
-.stage-pill.stage-1,
-.legend-swatch.stage-1 {
-  background: var(--stage-1-bg);
-}
-.toggle.stage-2:not([aria-pressed='true']),
-.stage-pill.stage-2,
-.legend-swatch.stage-2 {
-  background: var(--stage-2-bg);
-}
-.toggle.stage-3:not([aria-pressed='true']),
-.stage-pill.stage-3,
-.legend-swatch.stage-3 {
-  background: var(--stage-3-bg);
-}
-.stage-toggle {
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
-}
-.stage-toggle[aria-pressed='true'] kbd {
-  background: transparent;
-  color: inherit;
-  border-color: currentColor;
-}
-.stage-pill {
+/* "↳ O2" on an extension's chip and column head */
+.extends-ref {
   display: inline-block;
-  padding: 0 7px;
-  border-radius: 999px;
-  border: 1px solid var(--rule);
-  font-family: var(--font-ui);
+  font-family: var(--font-mono);
   font-size: var(--fs-xs);
   line-height: 16px;
-  color: var(--ink);
+  color: var(--ink-muted);
   white-space: nowrap;
 }
-.stage-names {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-}
-.stage-names .field-label {
-  font-size: var(--fs-xs);
-}
 
-/* legend and scope filter above the grids */
+/* legend above the box */
 .legend-bar {
   display: flex;
   flex-wrap: wrap;
@@ -976,25 +933,46 @@ textarea.field-input {
   height: 11px;
   border: 1px solid var(--rule);
 }
-.legend-out {
-  color: var(--mark-out-ink);
-  text-decoration: line-through;
+.legend-swatch.mark-fixed {
+  background: var(--mark-fixed-bg);
+  box-shadow: inset 3px 0 0 var(--mark-fixed-rule);
+  font-size: 7px;
+  line-height: 9px;
+  text-align: right;
+  padding-right: 1px;
+  color: var(--mark-fixed-ink);
 }
-.eval-bar .scope-filter {
-  margin-left: var(--space-4);
+.legend-swatch.mark-out {
+  background: linear-gradient(to bottom, transparent calc(50% - 0.5px), var(--mark-out-ink) calc(50% - 0.5px), var(--mark-out-ink) calc(50% + 0.5px), transparent calc(50% + 0.5px));
 }
-.scope-filter {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-.scope-filter .toggle {
-  font-size: var(--fs-xs);
+.legend-line {
+  stroke: var(--ink);
+  stroke-width: 2;
+  stroke-linecap: round;
 }
 .mark-toggle {
   display: inline-flex;
   gap: 6px;
   align-items: center;
+}
+.mark-toggle.mark-fixed:not([aria-pressed='true']) {
+  background: var(--mark-fixed-bg);
+}
+.mark-toggle.mark-out:not([aria-pressed='true']) {
+  color: var(--mark-out-ink);
+  text-decoration: line-through;
+}
+.insp-hint {
+  margin: 0;
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-subtle);
+  border-radius: var(--radius);
+  font-family: var(--font-ui);
+  font-size: var(--fs-sm);
+  color: var(--ink-muted);
+}
+.insp-hint kbd {
+  margin-left: var(--space-1);
 }
 .mark-toggle[aria-pressed='true'] kbd {
   background: transparent;
@@ -1046,6 +1024,22 @@ textarea.field-input {
 }
 .profile dd.none {
   color: var(--ink-faint);
+}
+.profile .fixed,
+.profile-table li.fixed {
+  color: var(--ink-muted);
+}
+.profile-table li.added {
+  font-weight: 600;
+}
+.profile-table li.added::before {
+  content: '+ ';
+  color: var(--ink-muted);
+}
+.profile-table li.fixed::before {
+  content: '◆ ';
+  font-size: 9px;
+  color: var(--mark-fixed-ink);
 }
 .shortcuts {
   margin: 0;
@@ -1345,7 +1339,7 @@ textarea.field-input {
   font-family: var(--font-ui);
   font-size: var(--fs-sm);
 }
-.opt-head > .stage-pill {
+.opt-head > .extends-ref {
   display: table;
   margin: -4px 0 8px var(--cell-pad-x);
 }

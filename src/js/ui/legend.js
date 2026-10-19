@@ -1,69 +1,37 @@
-// Legend above the Problem and Solution grids: what rows, cells and tints mean,
-// plus the "scope up to stage N" filter, which greys out later stages (and the
-// options that address them). The filter is a view setting, not saved.
+// Legend above the box: what rows, cells, marks, paths and line styles mean.
 
-import { h } from './dom.js';
-import { STAGES, stageName, inScope } from '../model.js';
+import { h, s } from './dom.js';
+import { MARK_INFO, DASHES } from './grid.js';
 
-/** A small pill with a stage's name, tinted like the stage. */
-export function stagePill(space, stage, extraClass) {
-  if (!STAGES.includes(stage)) return null;
-  return h('span', { class: ['stage-pill', 'stage-' + stage, extraClass] }, stageName(space, stage));
-}
-
-/** Whether an option is outside the current scope filter. */
-export const optionBeyondScope = (app, option) => !inScope(option.stage, app.state.scopeUpTo);
-
-export function scopeFilter(app) {
-  const { state, space } = app;
-  const button = (upTo, label, title) =>
-    h(
-      'button',
-      {
-        class: ['toggle', upTo && 'stage-' + upTo],
-        'aria-pressed': state.scopeUpTo === upTo ? 'true' : 'false',
-        title,
-        onclick: () => app.setScope(upTo),
-      },
-      label,
-    );
-  return h(
-    'div',
-    { class: 'scope-filter', role: 'group', 'aria-label': 'Scope filter' },
-    h('span', { class: 'bar-label' }, 'Scope up to'),
-    h(
-      'div',
-      { class: 'segmented' },
-      button(null, 'All', 'Show everything'),
-      STAGES.map((n) =>
-        button(n, stageName(space, n), n === 1 ? `Grey out everything outside ${stageName(space, 1)}` : `Grey out everything beyond ${stageName(space, n)}`),
-      ),
-    ),
+/** A short line in the ink colour with a dash pattern, for the legend. */
+function lineSample(dash) {
+  return s(
+    'svg',
+    { class: 'legend-line', viewBox: '0 0 22 8', width: '22', height: '8', 'aria-hidden': 'true' },
+    s('line', { x1: '1', y1: '4', x2: '21', y2: '4', 'stroke-dasharray': dash || null }),
   );
 }
 
-/** The legend's entries for a grid section (also used by the print view). */
-export function legendItems(app, section) {
-  const { space } = app;
-  const items = [];
-  if (section === 'problem') {
-    items.push(
-      h('span', { class: 'legend-item' }, h('strong', null, 'Rows'), ' dimensions of the problem'),
-      h('span', { class: 'legend-item' }, h('strong', null, 'Cells'), ' their parameters'),
-      ...STAGES.map((n) => h('span', { class: 'legend-item' }, h('span', { class: ['legend-swatch', 'stage-' + n], 'aria-hidden': 'true' }), stageName(space, n))),
-      h('span', { class: 'legend-item legend-out' }, 'Out of scope'),
+/** The legend's entries (also used by the print view). */
+export function legendItems() {
+  const mark = (m) =>
+    h(
+      'span',
+      { class: 'legend-item' },
+      h('span', { class: ['legend-swatch', 'mark-' + m], 'aria-hidden': 'true' }, MARK_INFO[m].glyph),
+      h('strong', null, MARK_INFO[m].label),
+      ' ' + MARK_INFO[m].help,
     );
-  } else {
-    items.push(
-      h('span', { class: 'legend-item' }, h('strong', null, 'Rows'), ' dimensions of the solution'),
-      h('span', { class: 'legend-item' }, h('strong', null, 'Cells'), ' building blocks'),
-      h('span', { class: 'legend-item' }, h('strong', null, 'Paths'), ' options: the blocks each one picks'),
-      h('span', { class: 'legend-item' }, h('strong', null, 'Stages'), ' ', STAGES.map((n) => stagePill(space, n))),
-    );
-  }
-  return items;
+  return [
+    h('span', { class: 'legend-item' }, h('strong', null, 'Rows'), ' dimensions'),
+    h('span', { class: 'legend-item' }, h('strong', null, 'Cells'), ' parameters, open unless marked'),
+    mark('fixed'),
+    mark('out'),
+    h('span', { class: 'legend-item' }, lineSample(DASHES[0]), h('strong', null, 'Paths'), ' options: what each one picks'),
+    h('span', { class: 'legend-item' }, lineSample(DASHES[1]), lineSample(DASHES[2]), h('strong', null, 'Extensions'), ' later versions of an option, in its colour'),
+  ];
 }
 
-export function renderLegend(app, section) {
-  return h('div', { class: 'legend-bar' }, h('div', { class: 'legend', role: 'note', 'aria-label': 'Legend' }, legendItems(app, section)), scopeFilter(app));
+export function renderLegend() {
+  return h('div', { class: 'legend-bar' }, h('div', { class: 'legend', role: 'note', 'aria-label': 'Legend' }, legendItems()));
 }

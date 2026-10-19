@@ -1,20 +1,25 @@
-// Options bar above the Solution grid (§3.3): one chip per option, "+ Option",
-// and the compare / line-style toggles.
+// Options bar above the box: one chip per option, "+ Option", and the
+// compare toggle. An extension's chip names the option it extends.
 
 import { h, s } from './dom.js';
 import { addOption, moveItem } from '../model.js';
 import { optionVars, optionStyle } from './grid.js';
-import { stagePill, optionBeyondScope } from './legend.js';
 
-/** A small colour swatch that also shows the option's line style. */
-export function swatch(id, lineStyles = false) {
-  const { dash } = optionStyle(id, lineStyles);
+/** A small colour swatch that also shows the option's line style (dashed or dotted for extensions). */
+export function swatch(space, id) {
+  const { dash } = optionStyle(space, id);
   return s(
     'svg',
-    { class: 'swatch', viewBox: '0 0 20 10', width: '20', height: '10', 'aria-hidden': 'true', style: optionVars(id) },
+    { class: 'swatch', viewBox: '0 0 20 10', width: '20', height: '10', 'aria-hidden': 'true', style: optionVars(space, id) },
     s('line', { x1: '1', y1: '5', x2: '19', y2: '5', 'stroke-dasharray': dash || null }),
     s('circle', { cx: '10', cy: '5', r: '3.5' }),
   );
+}
+
+/** "↳ O2" on an extension: the option it extends. */
+export function extendsRef(option) {
+  if (option.extends === null) return null;
+  return h('span', { class: 'extends-ref', title: `Extends O${option.extends}` }, '↳ O' + option.extends);
 }
 
 export function renderOptionsBar(app) {
@@ -24,13 +29,13 @@ export function renderOptionsBar(app) {
   bar.append(label);
 
   const chips = h('div', { class: 'chips' });
-  for (const o of space.options.items) {
+  for (const o of space.options) {
     const active = state.activeOption === o.id;
     const chip = h(
       'button',
       {
-        class: ['chip', active && 'active', active && state.pickMode && 'picking', optionBeyondScope(app, o) && 'beyond-scope'],
-        style: optionVars(o.id),
+        class: ['chip', active && 'active', active && state.pickMode && 'picking'],
+        style: optionVars(space, o.id),
         draggable: 'true',
         'aria-pressed': active ? 'true' : 'false',
         title: active
@@ -42,10 +47,10 @@ export function renderOptionsBar(app) {
         onclick: () => app.chipClick(o.id),
         ondblclick: () => app.inspectOption(o.id, { focusTitle: true }),
       },
-      swatch(o.id, state.lineStyles),
+      swatch(space, o.id),
       h('span', { class: 'id' }, 'O' + o.id),
       h('span', { class: ['chip-title', !o.title && 'empty'] }, o.title || 'Untitled'),
-      stagePill(space, o.stage),
+      extendsRef(o),
     );
     chips.append(chip);
   }
@@ -72,7 +77,7 @@ export function renderOptionsBar(app) {
     const chip = e.target.closest('.chip');
     if (dragId === null || !chip) return;
     e.preventDefault();
-    const items = space.options.items;
+    const items = space.options;
     const from = items.findIndex((o) => o.id === dragId);
     const r = chip.getBoundingClientRect();
     let to = items.findIndex((o) => o.id === Number(chip.dataset.id)) + (e.clientX < r.left + r.width / 2 ? 0 : 1);
@@ -115,27 +120,17 @@ export function renderOptionsBar(app) {
       },
       'Compare',
     ),
-    h(
-      'button',
-      {
-        class: 'toggle',
-        'aria-pressed': state.lineStyles ? 'true' : 'false',
-        title: 'Give every option its own dash pattern (for greyscale printing and many options)',
-        onclick: () => app.setView({ lineStyles: !state.lineStyles }),
-      },
-      'Line styles',
-    ),
   );
   bar.append(toggles);
 
   if (state.pickMode && state.activeOption !== null) {
-    const o = space.options.items.find((x) => x.id === state.activeOption);
+    const o = space.options.find((x) => x.id === state.activeOption);
     bar.append(
       h(
         'div',
-        { class: 'pick-hint', role: 'status', style: optionVars(state.activeOption) },
+        { class: 'pick-hint', role: 'status', style: optionVars(space, state.activeOption) },
         h('strong', null, 'Picking for O' + state.activeOption + (o && o.title ? ' ' + o.title : '')),
-        ' — click parameters (or press Space) to toggle them. Esc to finish.',
+        ' — click open parameters (or press Space) to toggle them. Esc to finish.',
       ),
     );
   }

@@ -1,12 +1,15 @@
 ﻿---
 title:   Messy Space   
-zwicky: 1
+zwicky: 2
 owner: Dennis
 scale: 1-5
 updated: 2026-10-01
 ---
-# solution
-> Building blocks, written sloppily.   
+# problem
+> Which delivery model should we offer?   
+- A stray list item under the problem.
+# box
+> A section note, which only # Problem takes.   
 
 
 
@@ -17,6 +20,8 @@ updated: 2026-10-01
   > Partly hosted.
 - Set {a b} of tags
 - Budget {in CHF} {O2}
+- Swiss hosting {fixed O1}
+- Mainframe {out fixed}
 
 ## Slide-Typen
 * Ohne Einschränkung {O1}
@@ -31,10 +36,10 @@ This stray paragraph cannot be placed.
 - External
 > Unindented note after a blank line.
 # Options
-## O1 First option
+## O1 First option {extends=O1}
 > Note of the first option.
-## O2 Second option
-## O2 Duplicate second
+## O2 Second option {extends=O1 extends=O3}
+## O2 Duplicate second {extends=O9}
 ## Untitled idea
 # Criteria
 

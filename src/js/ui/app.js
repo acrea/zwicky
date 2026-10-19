@@ -2,10 +2,10 @@
 
 import { h, clear, isTextInput, isMac } from './dom.js';
 import { parse, serialize, fileName as defaultFileName } from '../format.js';
-import { createSpace, findOption, findNode, cleanTitle, addParameter, addDimension } from '../model.js';
+import { createSpace, findOption, findNode, cleanTitle, addParameter, addDimension, toggleMark, togglePick } from '../model.js';
 import { createHistory } from '../history.js';
 import * as store from '../store.js';
-import { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt, moveToOtherSection } from './grid.js';
+import { renderGrid, gridKeydown, fixCursor, gridLayout, selKey, deleteAt } from './grid.js';
 import { drawPaths, watchPaths } from './paths.js';
 import { renderOptionsBar } from './options-bar.js';
 import { renderLegend } from './legend.js';
@@ -29,8 +29,7 @@ import { APP_VERSION } from '../version.js';
 // The version comes from the VERSION file at the repository root (see build.mjs).
 const DENSITIES = ['compact', 'normal', 'roomy'];
 const TABS = [
-  ['problem', 'Problem'],
-  ['solution', 'Solution'],
+  ['box', 'Box'],
   ['evaluation', 'Evaluation'],
 ];
 const MOD = isMac() ? '⌘' : 'Ctrl';
@@ -43,15 +42,13 @@ const app = {
   space: createSpace(),
   history: createHistory(),
   state: {
-    tab: prefs.tab && TABS.some(([k]) => k === prefs.tab) ? prefs.tab : 'problem',
-    cursor: { problem: null, solution: null, evaluation: null },
-    inspect: { problem: null, solution: null, evaluation: null },
+    tab: prefs.tab && TABS.some(([k]) => k === prefs.tab) ? prefs.tab : 'box',
+    cursor: { box: null, evaluation: null },
+    inspect: { box: null, evaluation: null },
     editing: null, // { section, sel, initial }
     activeOption: null,
     pickMode: false,
     compare: !!prefs.compare,
-    lineStyles: !!prefs.lineStyles,
-    scopeUpTo: null, // view filter: grey out what lies beyond stage n (not saved)
     evalView: { sortByRank: false, showNotes: false, heatmap: false, ...(prefs.evalView || {}) },
     inspectorOpen: prefs.inspectorOpen !== false,
     density: DENSITIES.includes(prefs.density) ? prefs.density : 'normal',
@@ -74,8 +71,8 @@ const autosave = store.debounce(() => {
 }, 400);
 
 function savePrefs() {
-  const { tab, compare, lineStyles, inspectorOpen, density, coords, evalView } = app.state;
-  store.savePrefs({ tab, compare, lineStyles, inspectorOpen, density, coords, evalView });
+  const { tab, compare, inspectorOpen, density, coords, evalView } = app.state;
+  store.savePrefs({ tab, compare, inspectorOpen, density, coords, evalView });
 }
 
 app.markDirty = () => {
@@ -97,9 +94,7 @@ app.change = (fn) => {
 
 function afterRestore() {
   const { state, space } = app;
-  for (const sec of ['problem', 'solution']) {
-    if (state.cursor[sec]) state.cursor[sec] = fixCursor(space, sec, state.cursor[sec]);
-  }
+  if (state.cursor.box) state.cursor.box = fixCursor(space, state.cursor.box);
   if (state.cursor.evaluation && !evalLayout(app).flat().some((x) => selKey(x) === selKey(state.cursor.evaluation))) state.cursor.evaluation = null;
   if (state.activeOption !== null && !findOption(space, state.activeOption)) {
     state.activeOption = null;
@@ -159,8 +154,7 @@ function moveCursorInPlace(section, sel) {
 }
 
 app.inspectOption = (id, { focusTitle = false } = {}) => {
-  const tab = app.state.tab === 'problem' ? 'solution' : app.state.tab;
-  app.state.inspect[tab] = id === null ? null : { type: 'option', id };
+  app.state.inspect[app.state.tab] = id === null ? null : { type: 'option', id };
   if (focusTitle) {
     app.state.inspectorOpen = true;
     savePrefs();
@@ -189,7 +183,7 @@ app.chipClick = (id) => {
     state.activeOption = id;
     state.pickMode = true;
   }
-  state.inspect.solution = { type: 'option', id };
+  state.inspect.box = { type: 'option', id };
   app.render();
 };
 
@@ -214,11 +208,6 @@ app.focusInspectorField = (id) => {
   }
 };
 
-app.setScope = (upTo) => {
-  app.state.scopeUpTo = upTo;
-  app.render();
-};
-
 app.setView = (patch) => {
   Object.assign(app.state, patch);
   savePrefs();
@@ -226,20 +215,43 @@ app.setView = (patch) => {
   app.render();
 };
 
-function cursorPos(section, sel) {
+function cursorPos(sel) {
   let pos = null;
-  gridLayout(app.space, section).forEach((row, r) => row.forEach((x, c) => selKey(x) === selKey(sel) && (pos = [r, c])));
+  gridLayout(app.space).forEach((row, r) => row.forEach((x, c) => selKey(x) === selKey(sel) && (pos = [r, c])));
   return pos;
 }
 
-app.deleteCursor = (section) => {
-  const sel = app.state.cursor[section];
-  if (sel) deleteAt(app, section, sel, cursorPos(section, sel));
+app.deleteCursor = () => {
+  const sel = app.state.cursor.box;
+  if (sel) deleteAt(app, sel, cursorPos(sel));
 };
 
-app.moveCursorDimension = (section) => {
-  const sel = app.state.cursor[section];
-  if (sel) moveToOtherSection(app, section, sel, cursorPos(section, sel));
+// ---------------------------------------------------------------- picks and marks
+
+/** Toggles option `id`'s pick on a parameter; a fixed or out parameter explains why it cannot be picked. */
+app.pick = (param, id) => {
+  const name = `“${param.title || 'Untitled'}”`;
+  if (param.mark === 'fixed') app.toast(`${name} is fixed: every option has it already.`);
+  else if (param.mark === 'out') app.toast(`${name} is out: no option can pick it.`);
+  else app.change(() => togglePick(param, id));
+};
+
+/**
+ * Toggles a parameter's mark. Marking it out asks first when options pick it,
+ * because their picks are removed; marking it fixed keeps every option on it,
+ * so its picks are simply no longer needed.
+ */
+app.markParameter = async (param, mark) => {
+  const name = `“${param.title || 'Untitled'}”`;
+  const picks = param.picks.length;
+  const setting = param.mark !== mark;
+  if (setting && mark === 'out' && picks) {
+    const which = param.picks.map((id) => 'O' + id).join(', ');
+    const ok = await app.confirm(`Mark ${name} as out?`, `It is picked by ${which}. Those picks are removed, because an excluded parameter cannot be picked. You can undo this.`, 'Mark as out');
+    if (!ok) return;
+  }
+  app.change(() => toggleMark(param, mark));
+  if (setting && mark === 'fixed') app.toast(`${name} is fixed: every option has it now.`);
 };
 
 // ---------------------------------------------------------------- inline editing
@@ -269,13 +281,13 @@ app.finishEdit = (value, { advance = 0, fromBlur = false } = {}) => {
     else app.render();
   } else if (sel.type === 'ghostdim') {
     if (title) {
-      const d = app.change(() => addDimension(space, section, Infinity, title));
+      const d = app.change(() => addDimension(space, Infinity, title));
       app.state.cursor[section] = { type: 'ghost', uid: d.uid };
       app.render();
     } else app.render();
   }
   if (advance && !fromBlur) {
-    const flat = (section === 'evaluation' ? evalLayout(app) : gridLayout(space, section)).flat();
+    const flat = (section === 'evaluation' ? evalLayout(app) : gridLayout(space)).flat();
     const i = flat.findIndex((x) => selKey(x) === selKey(app.state.cursor[section]));
     const next = flat[Math.max(0, Math.min(flat.length - 1, i + advance))];
     if (next) app.setCursor(section, next);
@@ -443,14 +455,10 @@ function renderMain() {
   if (!focusInHead) {
     clear(els.head);
     els.head.dataset.tab = tab;
-    if (tab === 'problem') {
-      els.head.append(noteBand(app.space.problem, 'Problem statement', 'What problem are we solving? Write the problem statement here.', 'band'));
-      els.head.append(renderLegend(app, 'problem'));
-    }
-    if (tab === 'solution') {
-      els.head.append(noteBand(app.space.solution, 'Solution intro', 'Optional intro note for the solution space.', 'intro'));
+    if (tab === 'box') {
+      els.head.append(problemBand());
       els.head.append(renderOptionsBar(app));
-      els.head.append(renderLegend(app, 'solution'));
+      els.head.append(renderLegend());
     }
     if (tab === 'evaluation') els.head.append(renderEvalHead(app));
   }
@@ -460,18 +468,16 @@ function renderMain() {
   clear(els.body);
   els.body.dataset.tab = tab;
 
-  if (tab === 'problem' || tab === 'solution') {
+  if (tab === 'box') {
     if (state.editing && state.editing.section !== tab) state.editing = null;
-    const { el, focusEl } = renderGrid(app, tab);
+    const { el, focusEl } = renderGrid(app);
     const scroller = h('div', { class: 'grid-scroll', dataset: { tab } }, el);
     els.body.append(scroller);
     const [sl, st] = state.scroll[tab] || [0, 0];
     scroller.scrollLeft = sl;
     scroller.scrollTop = st;
-    if (tab === 'solution') {
-      drawPaths(app, el);
-      unwatchPaths = watchPaths(app, el);
-    }
+    drawPaths(app, el);
+    unwatchPaths = watchPaths(app, el);
     if (focusEl && (gridHadFocus || focusEl.tagName === 'TEXTAREA')) {
       focusEl.focus({ preventScroll: true });
       if (focusEl.tagName === 'TEXTAREA') {
@@ -501,12 +507,23 @@ function renderMain() {
   }
 }
 
-function noteBand(target, label, placeholder, kind) {
+/** The problem statement, above the box. */
+function problemBand() {
+  const space = app.space;
   return h(
     'div',
-    { class: ['note-band', kind] },
-    kind === 'band' ? h('span', { class: 'band-arrow', 'aria-hidden': 'true' }, '↣') : null,
-    field(app, { label, value: target.note, multiline: true, placeholder, onInput: (v) => (target.note = v), cls: 'band-input', wrapClass: 'band-field', rows: 1 }),
+    { class: 'note-band band' },
+    h('span', { class: 'band-arrow', 'aria-hidden': 'true' }, '↣'),
+    field(app, {
+      label: 'Problem statement',
+      value: space.problem,
+      multiline: true,
+      placeholder: 'What problem are we solving? Write the problem statement here.',
+      onInput: (v) => (space.problem = v),
+      cls: 'band-input',
+      wrapClass: 'band-field',
+      rows: 1,
+    }),
   );
 }
 
@@ -739,11 +756,11 @@ function loadSpace(space, { fileName = '', handle = null, dirty = false } = {}) 
   app.space = space;
   app.history.clear();
   const { state } = app;
-  state.cursor = { problem: null, solution: null, evaluation: null };
-  state.inspect = { problem: null, solution: null, evaluation: null };
+  state.cursor = { box: null, evaluation: null };
+  state.inspect = { box: null, evaluation: null };
   state.editing = null;
   state.scroll = {};
-  state.activeOption = space.options.items.length ? space.options.items[0].id : null;
+  state.activeOption = space.options.length ? space.options[0].id : null;
   state.pickMode = false;
   state.handle = handle;
   state.fileName = fileName;
@@ -768,7 +785,7 @@ function openText(text, { name = '', handle = null, dirty = false } = {}) {
 app.newSpace = async () => {
   if (!(await confirmDiscard())) return;
   loadSpace(createSpace(''));
-  app.setTab('problem');
+  app.setTab('box');
 };
 
 app.open = async () => {
@@ -782,7 +799,7 @@ app.open = async () => {
 };
 
 app.importText = async () => {
-  const ta = h('textarea', { class: 'import-text', rows: '14', spellcheck: 'false', placeholder: '---\nzwicky: 1\ntitle: …\n---\n\n# Problem\n…', 'aria-label': 'Markdown to import' });
+  const ta = h('textarea', { class: 'import-text', rows: '14', spellcheck: 'false', placeholder: '---\nzwicky: 2\ntitle: …\n---\n\n# Problem\n> …\n\n# Box\n…', 'aria-label': 'Markdown to import' });
   const r = await dialog('Import from text', [h('p', null, 'Paste a zwicky Markdown document, e.g. one drafted by an LLM from docs/FORMAT.md. It replaces the open space.'), ta], [
     { label: 'Cancel', value: false },
     { label: 'Import', value: true, primary: true },
@@ -929,7 +946,7 @@ document.addEventListener('keydown', (e) => {
 
   const { state } = app;
   const inGrid = target === document.body || !target || els.body.contains(target);
-  if ((state.tab === 'problem' || state.tab === 'solution') && inGrid && gridKeydown(app, state.tab, e)) {
+  if (state.tab === 'box' && inGrid && gridKeydown(app, e)) {
     e.preventDefault();
     return;
   }
@@ -948,7 +965,7 @@ document.addEventListener('keydown', (e) => {
   } else if (e.key === 'Escape') {
     if (state.pickMode) app.activateOption(state.activeOption, false);
     else if (state.inspect[state.tab]) app.inspectOption(null);
-    else if (state.tab === 'solution' && state.activeOption !== null && !state.compare) app.activateOption(null);
+    else if (state.tab === 'box' && state.activeOption !== null && !state.compare) app.activateOption(null);
     else if (state.cursor[state.tab]) app.setCursor(state.tab, null);
   }
 });
@@ -1002,17 +1019,11 @@ document.addEventListener('visibilitychange', () => {
 function start() {
   buildShell();
   applyRootAttributes();
+  // a cached space this version cannot read (e.g. from zwicky 1.x) is dropped
   const saved = store.loadAutosave();
-  if (saved) {
-    const { space, report } = parse(saved.markdown);
-    if (space) {
-      loadSpace(space, { fileName: saved.fileName, dirty: saved.dirty });
-      return;
-    }
-    const key = store.backupAutosave();
-    app.alert('The browser cache could not be read', `${report.map((r) => r.message).join(' ')} It was kept under “${key}” and not overwritten.`);
-  }
-  openText(EXAMPLES['car-concept.zwicky.md'], { name: '' });
+  const space = saved && parse(saved.markdown).space;
+  if (space) loadSpace(space, { fileName: saved.fileName, dirty: saved.dirty });
+  else openText(EXAMPLES['car-concept.zwicky.md'], { name: '' });
 }
 
 start();

@@ -6,38 +6,28 @@ import {
   FORMAT_VERSION,
   DEFAULT_SCALE,
   MARKS,
-  STAGES,
-  DEFAULT_STAGE_NAMES,
-  cleanStageName,
   createSpace,
   createDimension,
   createParameter,
   createOption,
   createCriterion,
   clampWeight,
+  canExtend,
   cleanTitle,
   optionKey,
   criterionKey,
 } from './model.js';
 
-/**
- * Upgrades older files step by step before parsing. Each entry turns the text
- * of a version `from` file into the text of a version `from + 1` file, e.g.
- *   { from: 1, up: (text) => text.replace(…) }
- * v1 is the first version, so the list is empty.
- */
-export const MIGRATIONS = [];
-
-const SECTIONS = ['problem', 'solution', 'options', 'criteria', 'ratings', 'notes'];
+const SECTIONS = ['problem', 'box', 'options', 'criteria', 'ratings', 'notes'];
 const SECTION_TITLES = {
   problem: 'Problem',
-  solution: 'Solution',
+  box: 'Box',
   options: 'Options',
   criteria: 'Criteria',
   ratings: 'Ratings',
   notes: 'Notes',
 };
-const KNOWN_META = ['zwicky', 'title', 'scale', 'stages', 'updated'];
+const KNOWN_META = ['zwicky', 'title', 'scale', 'updated'];
 const SUB_SEPARATOR = ' › ';
 
 // ---------------------------------------------------------------- helpers
@@ -127,41 +117,29 @@ function parseScale(value) {
   if (!(min < max) || max > 100) return null;
   return { min, max };
 }
-
 // ---------------------------------------------------------------- parse
+
+export { cleanTitle };
 
 /**
  * Parses a zwicky Markdown file. Never throws on user content: problems are
  * collected in `report` as { line, level: 'error' | 'warning' | 'info', message }.
- * `space` is null only when the file cannot be read at all (e.g. a newer version).
+ * `space` is null only when the file cannot be read at all (another format version).
  */
-export { cleanTitle };
-
 export function parse(text) {
   const report = [];
   try {
-    let source = String(text ?? '');
-    const { version, raw } = readVersion(splitLines(source));
-    if (version !== null && version > FORMAT_VERSION) {
-      report.push({
-        line: 1,
-        level: 'error',
-        message: `This file uses zwicky format version ${version}; this app reads up to version ${FORMAT_VERSION}. Please use a newer zwicky.`,
-      });
+    const lines = splitLines(text);
+    const { version } = readVersion(lines);
+    if (version !== null && version !== FORMAT_VERSION) {
+      const message =
+        version > FORMAT_VERSION
+          ? `This file uses zwicky format version ${version}; this app reads version ${FORMAT_VERSION}. Please use a newer zwicky.`
+          : `This file uses zwicky format version ${version}, from an older zwicky; this app reads version ${FORMAT_VERSION} only.`;
+      report.push({ line: 1, level: 'error', message });
       return { space: null, report };
     }
-    if (version !== null && version >= 1) {
-      for (let v = version; v < FORMAT_VERSION; v++) {
-        const step = MIGRATIONS.find((m) => m.from === v);
-        if (!step) {
-          report.push({ line: 1, level: 'error', message: `No migration from format version ${v}.` });
-          return { space: null, report };
-        }
-        source = step.up(source);
-        report.push({ line: 1, level: 'info', message: `Upgraded from format version ${v} to ${v + 1}.` });
-      }
-    }
-    const space = parseBody(splitLines(source), report, version, raw);
+    const space = parseBody(lines, report);
     report.sort((a, b) => a.line - b.line);
     return { space, report };
   } catch (err) {
@@ -170,7 +148,7 @@ export function parse(text) {
   }
 }
 
-function parseBody(lines, report, version, rawVersion) {
+function parseBody(lines, report) {
   const add = (line, level, message) => report.push({ line, level, message });
   const space = createSpace();
 
@@ -193,11 +171,12 @@ function parseBody(lines, report, version, rawVersion) {
   let bodyStart = 0;
   const fm = findFrontMatter(lines);
   if (!fm) {
-    add(1, 'info', 'No front matter; read as zwicky format version 1.');
+    add(1, 'info', `No front matter; read as zwicky format version ${FORMAT_VERSION}.`);
   } else if (fm.end < 0) {
     add(fm.start + 1, 'warning', 'Front matter is not closed with "---"; read as content.');
   } else {
     const seen = new Set();
+    let rawVersion = null;
     for (let j = fm.start + 1; j < fm.end; j++) {
       const ln = j + 1;
       if (lines[j].trim() === '') continue;
@@ -210,8 +189,8 @@ function parseBody(lines, report, version, rawVersion) {
       const key = KNOWN_META.includes(lower) ? lower : kv.key;
       if (seen.has(key)) add(ln, 'warning', `Duplicate front matter key "${key}"; the last value wins.`);
       seen.add(key);
-      if (key === 'zwicky') continue;
-      if (key === 'title') space.meta.title = kv.value;
+      if (key === 'zwicky') rawVersion = kv.value;
+      else if (key === 'title') space.meta.title = kv.value;
       else if (key === 'updated') space.meta.updated = kv.value;
       else if (key === 'scale') {
         const scale = parseScale(kv.value);
@@ -220,30 +199,25 @@ function parseBody(lines, report, version, rawVersion) {
           space.meta.scale = { ...DEFAULT_SCALE };
           add(ln, 'warning', `Scale "${kv.value}" is not "<min>-<max>"; using ${DEFAULT_SCALE.min}-${DEFAULT_SCALE.max}.`);
         }
-      } else if (key === 'stages') {
-        const names = kv.value.split(',').map(cleanStageName);
-        if (names.length > STAGES.length)
-          add(ln, 'warning', `Only ${STAGES.length} stages are supported; "${names.slice(STAGES.length).join(', ')}" dropped.`);
-        space.meta.stages = DEFAULT_STAGE_NAMES.map((d, i) => names[i] || d);
-        if (names.slice(0, STAGES.length).some((n) => !n) || names.length < STAGES.length)
-          add(ln, 'info', `Missing stage names filled in with the defaults: ${space.meta.stages.join(', ')}.`);
       } else {
         const existing = space.meta.extra.find((e) => e[0] === key);
         if (existing) existing[1] = kv.value;
         else space.meta.extra.push([key, kv.value]);
       }
     }
-    if (rawVersion === null) add(fm.start + 1, 'info', 'Front matter has no "zwicky" version; read as version 1.');
-    else if (version === null || version < 1)
-      add(fm.start + 1, 'warning', `Format version "${rawVersion}" is not valid; read as version 1.`);
+    if (rawVersion === null) add(fm.start + 1, 'info', `Front matter has no "zwicky" version; read as version ${FORMAT_VERSION}.`);
+    else if (!/^\d+$/.test(rawVersion))
+      add(fm.start + 1, 'warning', `Format version "${rawVersion}" is not valid; read as version ${FORMAT_VERSION}.`);
     bodyStart = fm.end + 1;
   }
 
   // ---- body
   const DROP = {}; // note/item target whose lines are silently dropped (unknown rating block)
+  const PROBLEM = {}; // note target of the problem statement
+  const SECTION_NOTE = {}; // a note directly under another section heading: not used
   let section = null; // a SECTIONS key, 'unknown', or null before the first section
   const seenSections = new Set();
-  let dim = null; // current dimension (problem/solution)
+  let dim = null; // current dimension of the box
   let sub = null; // current ### sub-dimension being flattened
   let ratingBlock = null; // current ## O<n> block under # Ratings, or DROP
   let target = null; // where the next "> " note line goes
@@ -255,6 +229,7 @@ function parseBody(lines, report, version, rawVersion) {
   const optionRecs = [];
   const criterionRecs = [];
   const pickRefs = []; // { param, id, line }
+  const extendRefs = []; // { option, id, line }
   const ratingBlocks = [];
 
   const setTarget = (t) => {
@@ -269,7 +244,7 @@ function parseBody(lines, report, version, rawVersion) {
       d.tags.push(tok);
       add(ln, 'info', `Unknown tag "${tok}" on dimension kept.`);
     }
-    space[section].dims.push(d);
+    space.dims.push(d);
     dim = d;
     sub = null;
     setTarget(d);
@@ -300,7 +275,7 @@ function parseBody(lines, report, version, rawVersion) {
         sub = null;
         ratingBlock = null;
         unknownBlock = null;
-        setTarget(key === 'notes' ? null : space[key]);
+        setTarget(key === 'problem' ? PROBLEM : key === 'notes' ? null : SECTION_NOTE);
         continue;
       }
       if (section !== 'notes') {
@@ -330,6 +305,10 @@ function parseBody(lines, report, version, rawVersion) {
     // > note line
     if (/^\s*>/.test(raw)) {
       if (target === DROP) continue;
+      if (target === SECTION_NOTE) {
+        unplace(ln, raw, `Only # Problem takes a note; a note under # ${SECTION_TITLES[section]} is not used`);
+        continue;
+      }
       if (!target) {
         unplace(ln, raw, 'Note without a heading or list item to belong to');
         continue;
@@ -343,9 +322,15 @@ function parseBody(lines, report, version, rawVersion) {
     }
     blank = false;
 
+    if (section === 'problem') {
+      unplace(ln, raw, '# Problem holds only the problem statement as a "> " note');
+      setTarget(null);
+      continue;
+    }
+
     // ## heading
     if (level === 2) {
-      if (section === 'problem' || section === 'solution') {
+      if (section === 'box') {
         startDimension(htext, ln);
       } else if (section === 'options' || section === 'criteria') {
         const letter = section === 'options' ? 'O' : 'C';
@@ -353,9 +338,10 @@ function parseBody(lines, report, version, rawVersion) {
         const item = section === 'options' ? createOption(null, title) : createCriterion(null, title);
         for (const tok of tokens) {
           const w = /^w=(-?\d+)$/.exec(tok);
-          const st = /^stage=(\d+)$/.exec(tok);
-          if (section === 'options' && st && STAGES.includes(Number(st[1])) && !item.stage) {
-            item.stage = Number(st[1]);
+          const ext = /^extends=O(\d+)$/.exec(tok);
+          if (section === 'options' && ext) {
+            if (extendRefs.some((r) => r.option === item)) add(ln, 'warning', `Option extends more than one option; "${tok}" dropped.`);
+            else extendRefs.push({ option: item, id: Number(ext[1]), line: ln });
           } else if (section === 'criteria' && w) {
             const weight = clampWeight(Number(w[1]));
             if (weight !== Number(w[1])) add(ln, 'warning', `Weight ${w[1]} is outside 0–10; set to ${weight}.`);
@@ -365,7 +351,7 @@ function parseBody(lines, report, version, rawVersion) {
             add(ln, 'info', `Unknown tag "${tok}" kept.`);
           }
         }
-        (section === 'options' ? space.options : space.criteria).items.push(item);
+        space[section].push(item);
         (section === 'options' ? optionRecs : criterionRecs).push({ item, id, line: ln });
         setTarget(item);
       } else if (section === 'ratings') {
@@ -389,7 +375,7 @@ function parseBody(lines, report, version, rawVersion) {
 
     // ### and deeper
     if (level >= 3) {
-      if (level === 3 && (section === 'problem' || section === 'solution')) {
+      if (level === 3 && section === 'box') {
         if (!dim) {
           add(ln, 'warning', `"### ${htext}" has no parent dimension; read as a dimension.`);
           startDimension(htext, ln);
@@ -397,11 +383,7 @@ function parseBody(lines, report, version, rawVersion) {
         }
         const { title, tokens } = splitTitle(htext, ln, add);
         if (tokens.length) add(ln, 'warning', `Tags on a sub-dimension are dropped: {${tokens.join(' ')}}.`);
-        add(
-          ln,
-          'warning',
-          `Sub-dimension "${title}" flattened into "${dim.title}" (sub-dimensions are not supported in v1).`,
-        );
+        add(ln, 'warning', `Sub-dimension "${title}" flattened into "${dim.title}" (sub-dimensions are not supported).`);
         sub = { title, target: {} };
         if (!subdims.has(dim)) subdims.set(dim, []);
         subdims.get(dim).push(sub);
@@ -417,7 +399,7 @@ function parseBody(lines, report, version, rawVersion) {
     const li = /^\s*[-*+](?:\s+(.*))?$/.exec(raw);
     if (li) {
       const text = li[1] || '';
-      if (section === 'problem' || section === 'solution') {
+      if (section === 'box') {
         if (!dim) {
           unplace(ln, raw, 'Parameter outside a dimension');
           setTarget(null);
@@ -425,29 +407,26 @@ function parseBody(lines, report, version, rawVersion) {
         }
         const { title, tokens } = splitTitle(text, ln, add);
         const param = createParameter(sub ? sub.title + SUB_SEPARATOR + title : title);
+        const picks = [];
         for (const tok of tokens) {
           const pick = /^O(\d+)$/.exec(tok);
-          const focus = /^focus(?:=(\d+))?$/.exec(tok);
-          const stage = focus ? Number(focus[1] || 1) : null;
-          if (section === 'problem' && (MARKS.includes(tok) || (focus && STAGES.includes(stage)))) {
-            const current = param.stage ? stageTag(param.stage) : param.mark;
-            if (current) {
-              if (current !== tok) add(ln, 'warning', `Parameter has both "${current}" and "${tok}"; kept "${current}".`);
-            } else if (focus) param.stage = stage;
-            else param.mark = tok;
-          } else if (section === 'problem' && focus) {
-            param.tags.push(tok);
-            add(ln, 'warning', `Stage ${focus[1]} does not exist (only 1–${STAGES.length}); "${tok}" kept as an unknown tag.`);
-          } else if (section === 'solution' && pick) {
+          if (MARKS.includes(tok)) {
+            if (!param.mark) param.mark = tok;
+            else if (param.mark !== tok) add(ln, 'warning', `Parameter has both "${param.mark}" and "${tok}"; kept "${param.mark}".`);
+          } else if (pick) {
             const id = Number(pick[1]);
-            if (pickRefs.some((r) => r.param === param && r.id === id)) add(ln, 'info', `Duplicate pick O${id} removed.`);
-            else pickRefs.push({ param, id, line: ln });
+            if (picks.includes(id)) add(ln, 'info', `Duplicate pick O${id} removed.`);
+            else picks.push(id);
           } else {
             param.tags.push(tok);
             add(ln, 'info', `Unknown tag "${tok}" kept.`);
           }
         }
-        dim.children.push(param);
+        if (param.mark && picks.length) {
+          const what = param.mark === 'fixed' ? 'it counts for every option' : 'it cannot be picked';
+          add(ln, 'warning', `Parameter is ${param.mark}, so ${what}; picks ${picks.map((id) => 'O' + id).join(' ')} dropped.`);
+        } else for (const id of picks) pickRefs.push({ param, id, line: ln });
+        dim.params.push(param);
         setTarget(param);
       } else if (section === 'ratings' && ratingBlock) {
         if (ratingBlock === DROP) continue;
@@ -480,19 +459,17 @@ function parseBody(lines, report, version, rawVersion) {
 
   // ---- notes
   const noteOf = (t) => normNote((noteBuf.get(t) || []).join('\n'));
-  for (const key of ['problem', 'solution', 'options', 'criteria', 'ratings']) space[key].note = noteOf(space[key]);
-  for (const key of ['problem', 'solution']) {
-    for (const d of space[key].dims) {
-      d.note = noteOf(d);
-      for (const p of d.children) p.note = noteOf(p);
-      for (const s of subdims.get(d) || []) {
-        const sn = noteOf(s.target);
-        if (sn) d.note = d.note ? `${d.note}\n${s.title}: ${sn}` : `${s.title}: ${sn}`;
-      }
+  space.problem = noteOf(PROBLEM);
+  for (const d of space.dims) {
+    d.note = noteOf(d);
+    for (const p of d.params) p.note = noteOf(p);
+    for (const s of subdims.get(d) || []) {
+      const sn = noteOf(s.target);
+      if (sn) d.note = d.note ? `${d.note}\n${s.title}: ${sn}` : `${s.title}: ${sn}`;
     }
   }
-  for (const o of space.options.items) o.note = noteOf(o);
-  for (const c of space.criteria.items) c.note = noteOf(c);
+  for (const o of space.options) o.note = noteOf(o);
+  for (const c of space.criteria) c.note = noteOf(c);
 
   // ---- ids
   const assignIds = (recs, letter, what) => {
@@ -515,14 +492,21 @@ function parseBody(lines, report, version, rawVersion) {
   assignIds(optionRecs, 'O', 'Option');
   assignIds(criterionRecs, 'C', 'Criterion');
 
-  const optionIds = new Set(space.options.items.map((o) => o.id));
-  const criterionIds = new Set(space.criteria.items.map((c) => c.id));
+  const optionIds = new Set(space.options.map((o) => o.id));
+  const criterionIds = new Set(space.criteria.map((c) => c.id));
 
   for (const ref of pickRefs) {
     if (optionIds.has(ref.id)) ref.param.picks.push(ref.id);
     else add(ref.line, 'warning', `Unknown option O${ref.id}; pick dropped.`);
   }
-  for (const d of space.solution.dims) for (const p of d.children) p.picks.sort((a, b) => a - b);
+  for (const d of space.dims) for (const p of d.params) p.picks.sort((a, b) => a - b);
+
+  for (const ref of extendRefs) {
+    if (!optionIds.has(ref.id)) add(ref.line, 'warning', `Unknown option O${ref.id}; "extends" dropped.`);
+    else if (!canExtend(space, ref.option.id, ref.id))
+      add(ref.line, 'warning', `O${ref.option.id} cannot extend O${ref.id} (an option cannot extend itself or its own extension); "extends" dropped.`);
+    else ref.option.extends = ref.id;
+  }
 
   // ---- ratings
   const { min, max } = space.meta.scale;
@@ -545,7 +529,7 @@ function parseBody(lines, report, version, rawVersion) {
       }
       const note = noteOf(e.cell);
       if (score === null && !note && e.tags.length === 0) continue;
-      const row = (space.ratings.cells[ok] ||= {});
+      const row = (space.ratings[ok] ||= {});
       const ck = criterionKey(e.cid);
       if (row[ck]) add(e.line, 'warning', `Second rating for O${block.id} × C${e.cid}; the last one wins.`);
       row[ck] = { score, note, tags: e.tags };
@@ -567,11 +551,6 @@ function parseBody(lines, report, version, rawVersion) {
 
 // ---------------------------------------------------------------- serialize
 
-/** The tag for a problem stage: "focus" for stage 1, "focus=2" and "focus=3" for the others. */
-function stageTag(stage) {
-  return stage === 1 ? 'focus' : 'focus=' + stage;
-}
-
 function tagGroup(tokens) {
   return tokens.length ? ' {' + tokens.join(' ') + '}' : '';
 }
@@ -587,7 +566,7 @@ function cleanValue(v) {
     .trim();
 }
 
-/** Writes the canonical form (§4.4). */
+/** Writes the canonical form (docs/FORMAT.md). */
 export function serialize(space) {
   const out = [];
   const { meta } = space;
@@ -596,8 +575,6 @@ export function serialize(space) {
   if (title) out.push(`title: ${title}`);
   const scale = meta.scale || DEFAULT_SCALE;
   out.push(`scale: ${scale.min}-${scale.max}`);
-  const stages = DEFAULT_STAGE_NAMES.map((d, i) => cleanStageName((meta.stages || [])[i]) || d);
-  if (stages.some((n, i) => n !== DEFAULT_STAGE_NAMES[i])) out.push(`stages: ${stages.join(', ')}`);
   const updated = cleanValue(meta.updated);
   if (updated) out.push(`updated: ${updated}`);
   for (const [k, v] of meta.extra || []) {
@@ -615,54 +592,46 @@ export function serialize(space) {
     for (const l of n.split('\n')) out.push(l ? `${indent}> ${l}` : `${indent}>`);
   };
 
-  const optionIds = new Set(space.options.items.map((o) => o.id));
-  const criterionIds = new Set(space.criteria.items.map((c) => c.id));
+  const optionIds = new Set(space.options.map((o) => o.id));
+  const criterionIds = new Set(space.criteria.map((c) => c.id));
 
-  // Problem and Solution
-  const writeChildren = (key, children, prefix) => {
-    for (const c of children) {
-      if (c.kind === 'dim') {
-        // v1 never creates sub-dimensions; flatten defensively like the reader does.
-        writeChildren(key, c.children, prefix + cleanTitle(c.title) + SUB_SEPARATOR);
-        continue;
-      }
-      const tokens = [];
-      if (key === 'problem' && STAGES.includes(c.stage)) tokens.push(stageTag(c.stage));
-      else if (key === 'problem' && MARKS.includes(c.mark)) tokens.push(c.mark);
-      if (key === 'solution')
-        for (const id of [...c.picks].sort((a, b) => a - b)) if (optionIds.has(id)) tokens.push('O' + id);
-      tokens.push(...c.tags);
-      out.push(itemLine('-', prefix + cleanTitle(c.title), tokens));
-      note(c.note, '  ');
-    }
-  };
-  for (const key of ['problem', 'solution']) {
-    const sec = space[key];
-    if (!normNote(sec.note) && sec.dims.length === 0) continue;
-    heading('# ' + SECTION_TITLES[key]);
-    note(sec.note, '');
-    for (const d of sec.dims) {
+  // Problem
+  if (normNote(space.problem)) {
+    heading('# Problem');
+    note(space.problem, '');
+  }
+
+  // Box
+  if (space.dims.length) {
+    heading('# Box');
+    for (const d of space.dims) {
       heading(itemLine('##', d.title, d.tags));
       note(d.note, '');
-      writeChildren(key, d.children, '');
+      for (const p of d.params) {
+        const tokens = [];
+        if (MARKS.includes(p.mark)) tokens.push(p.mark);
+        else for (const id of [...p.picks].sort((a, b) => a - b)) if (optionIds.has(id)) tokens.push('O' + id);
+        tokens.push(...p.tags);
+        out.push(itemLine('-', p.title, tokens));
+        note(p.note, '  ');
+      }
     }
   }
 
   // Options
-  if (normNote(space.options.note) || space.options.items.length) {
+  if (space.options.length) {
     heading('# Options');
-    note(space.options.note, '');
-    for (const o of space.options.items) {
-      heading(itemLine('## O' + o.id, o.title, STAGES.includes(o.stage) ? ['stage=' + o.stage, ...o.tags] : o.tags));
+    for (const o of space.options) {
+      const ext = o.extends !== null && optionIds.has(o.extends) ? ['extends=O' + o.extends] : [];
+      heading(itemLine('## O' + o.id, o.title, [...ext, ...o.tags]));
       note(o.note, '');
     }
   }
 
   // Criteria
-  if (normNote(space.criteria.note) || space.criteria.items.length) {
+  if (space.criteria.length) {
     heading('# Criteria');
-    note(space.criteria.note, '');
-    for (const c of space.criteria.items) {
+    for (const c of space.criteria) {
       const w = clampWeight(c.weight);
       const tokens = w === 1 ? [...c.tags] : ['w=' + w, ...c.tags];
       heading(itemLine('## C' + c.id, c.title, tokens));
@@ -672,11 +641,11 @@ export function serialize(space) {
 
   // Ratings
   const ratingBlocks = [];
-  for (const o of space.options.items) {
-    const row = space.ratings.cells[optionKey(o.id)];
+  for (const o of space.options) {
+    const row = space.ratings[optionKey(o.id)];
     if (!row) continue;
     const lines = [];
-    for (const c of space.criteria.items) {
+    for (const c of space.criteria) {
       const cell = row[criterionKey(c.id)];
       if (!cell || !criterionIds.has(c.id)) continue;
       const cellNote = normNote(cell.note);
@@ -689,9 +658,8 @@ export function serialize(space) {
     }
     if (lines.length) ratingBlocks.push({ o, lines });
   }
-  if (normNote(space.ratings.note) || ratingBlocks.length) {
+  if (ratingBlocks.length) {
     heading('# Ratings');
-    note(space.ratings.note, '');
     for (const { o, lines } of ratingBlocks) {
       heading(itemLine('## O' + o.id, o.title, []));
       for (const l of lines) {
