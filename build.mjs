@@ -11,6 +11,7 @@ const SRC = join(ROOT, 'src');
 const JS = join(SRC, 'js');
 const ENTRY = 'ui/app.js';
 const OUT = join(ROOT, 'dist', 'zwicky.html');
+const SKILL_OUT = join(ROOT, 'dist', 'skill', 'SKILL.md');
 const MAX_BYTES = 1.5 * 1024 * 1024;
 
 const read = (p) => readFileSync(p, 'utf8');
@@ -32,6 +33,24 @@ function formatDocModule() {
   return `export const FORMAT_DOC = ${JSON.stringify(read(join(ROOT, 'docs', 'FORMAT.md')))};\n`;
 }
 
+/**
+ * The AI skill (SKILL.md): docs/SKILL.template.md with the version, the car-concept
+ * example and the full format specification filled in, so it never drifts from them.
+ */
+export function skillDoc() {
+  const fill = (text, marker, content) => {
+    if (!text.includes(marker)) throw new Error(`docs/SKILL.template.md lacks ${marker}`);
+    return text.replace(marker, () => content);
+  };
+  let text = read(join(ROOT, 'docs', 'SKILL.template.md')).replaceAll('{{VERSION}}', readVersion());
+  text = fill(text, '<!-- @EXAMPLE -->', '```markdown\n' + read(join(ROOT, 'examples', 'car-concept.zwicky.md')).trimEnd() + '\n```');
+  text = fill(text, '<!-- @FORMAT -->', read(join(ROOT, 'docs', 'FORMAT.md')).trimEnd());
+  return text.trimEnd() + '\n';
+}
+function skillDocModule() {
+  return `export const SKILL_DOC = ${JSON.stringify(skillDoc())};\n`;
+}
+
 /** version.js: the app version, from the VERSION file (one line, e.g. 1.2.0 or 1.2.0-rc.1). */
 export function readVersion() {
   const v = read(join(ROOT, 'VERSION')).trim();
@@ -42,7 +61,7 @@ function versionModule() {
   return `export const APP_VERSION = ${JSON.stringify(readVersion())};\n`;
 }
 
-const VIRTUAL = { 'examples.js': examplesModule, 'format-doc.js': formatDocModule, 'version.js': versionModule };
+const VIRTUAL = { 'examples.js': examplesModule, 'format-doc.js': formatDocModule, 'version.js': versionModule, 'skill-doc.js': skillDocModule };
 
 // ---------------------------------------------------------------- bundler
 
@@ -158,8 +177,15 @@ function build() {
   const kb = (bytes / 1024).toFixed(0);
   if (bytes > MAX_BYTES) throw new Error(`dist/zwicky.html is ${kb} KB, over the 1.5 MB budget`);
   console.log(`${relative(ROOT, OUT)}  ${kb} KB  (version ${readVersion()})`);
+
+  mkdirSync(dirname(SKILL_OUT), { recursive: true });
+  writeFileSync(SKILL_OUT, skillDoc());
+  console.log(relative(ROOT, SKILL_OUT));
 }
 
 // `node build.mjs --version` prints the version (used by the release workflow).
-if (process.argv.includes('--version')) console.log(readVersion());
-else build();
+// Importing this file (e.g. from the tests) builds nothing.
+if (resolve(process.argv[1] || '') === fileURLToPath(import.meta.url)) {
+  if (process.argv.includes('--version')) console.log(readVersion());
+  else build();
+}

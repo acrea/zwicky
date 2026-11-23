@@ -23,7 +23,7 @@ jobs:
         run: |
           node build.mjs
           git diff --exit-code -- dist/ || {
-            echo "::error::dist/zwicky.html is out of date. Run 'node build.mjs' and commit the result."
+            echo "::error::dist/ is out of date. Run 'node build.mjs' and commit the result."
             exit 1
           }
 

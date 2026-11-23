@@ -25,6 +25,7 @@ import {
 } from './evaluation.js';
 import { EXAMPLES } from '../examples.js';
 import { FORMAT_DOC } from '../format-doc.js';
+import { SKILL_DOC } from '../skill-doc.js';
 import { APP_VERSION } from '../version.js';
 
 // The version comes from the VERSION file at the repository root (see build.mjs).
@@ -977,6 +978,10 @@ app.help = () => {
     const ok = await store.copyText(FORMAT_DOC);
     app.toast(ok ? 'Copied the format specification.' : 'Copying failed. Select the text instead.');
   } }, 'Copy the format');
+  const downloadSkill = h('button', { class: 'btn', onclick: () => {
+    store.download(SKILL_DOC, 'SKILL.md', 'text/markdown;charset=utf-8');
+    app.toast('Downloaded SKILL.md. Install it as a skill named zwicky.');
+  } }, 'Download the AI skill');
   const served = /^https?:$/.test(location.protocol);
   const offline = served
     ? h('p', null, h('a', { class: 'link', href: location.href.split(/[?#]/)[0], download: 'zwicky.html' }, 'Download zwicky.html for offline use'), ' — the whole app is this one file. It also works when opened from disk.')
@@ -997,7 +1002,12 @@ app.help = () => {
         h('a', { class: 'link', href: '../docs/FORMAT.md', target: '_blank', rel: 'noopener' }, 'docs/FORMAT.md'),
         '. Give it to an LLM to draft or edit a space, then paste the result into File → Import from text.',
       ),
-      h('div', { class: 'insp-actions' }, copySpec, showSpec),
+      h(
+        'p',
+        null,
+        'Or install zwicky as an AI skill: SKILL.md holds the specification and teaches an assistant to read, create and edit zwicky files. In Claude Code, save it as ~/.claude/skills/zwicky/SKILL.md; in the Claude apps, upload it under Settings → Capabilities → Skills (zipped in a folder named zwicky if a .zip is asked for).',
+      ),
+      h('div', { class: 'insp-actions' }, copySpec, showSpec, downloadSkill),
       spec,
       h('h3', null, 'Share as a link'),
       h(

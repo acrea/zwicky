@@ -63,6 +63,7 @@ jobs:
           mkdir site
           cp dist/zwicky.html site/index.html
           cp dist/zwicky.html site/zwicky.html
+          cp dist/skill/SKILL.md site/SKILL.md
           touch site/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3

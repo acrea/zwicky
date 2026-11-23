@@ -87,15 +87,17 @@ scale: 1-5
   > Assumes LOHAS and WOOPIEs overlap little.
 ```
 
-[docs/FORMAT.md](docs/FORMAT.md) is the full specification; Help in the app can copy it. Hand it to an LLM to draft or edit a space, then paste the result into *File → Import from text*. zwicky reads small variations and reports what it changed; it always saves one canonical form. [examples/](examples/) has sample files. Files from zwicky 1.x (format version 1, with separate problem and solution grids) are not read.
+[docs/FORMAT.md](docs/FORMAT.md) is the full specification; Help in the app can copy it. Hand it to an LLM to draft or edit a space, then paste the result into *File → Import from text*.
+
+**AI skill.** *Help → Download the AI skill* saves [`SKILL.md`](dist/skill/SKILL.md), an installable skill that teaches an AI assistant to read, create and edit zwicky files: how to frame a problem, build a box, compose and rate options, which references to rewrite when editing, a checklist, a canonical example and the full specification. In Claude Code, save it as `~/.claude/skills/zwicky/SKILL.md` (or `.claude/skills/zwicky/SKILL.md` in a project). In the Claude apps, upload it under *Settings → Capabilities → Skills*; if a `.zip` is asked for, zip a folder `zwicky/` that holds the file. Every release also publishes it at <https://acrea.github.io/zwicky/SKILL.md>. zwicky reads small variations and reports what it changed; it always saves one canonical form. [examples/](examples/) has sample files. Files from zwicky 1.x (format version 1, with separate problem and solution grids) are not read.
 
 ## Development
 
 Requires Node 20 or later. No npm packages.
 
 ```sh
-node build.mjs       # writes dist/zwicky.html (commit it: it is the product)
-node --test          # unit tests: format, model, scoring, share links
+node build.mjs       # writes dist/zwicky.html and dist/skill/SKILL.md (commit both: they are the product)
+node --test          # unit tests: format, model, scoring, share links, the skill
 node tests/e2e.mjs   # optional browser checks; needs Playwright (npm i -g playwright)
 ```
 
@@ -109,7 +111,8 @@ node tests/e2e.mjs   # optional browser checks; needs Playwright (npm i -g playw
 | `src/css/base.css`, `src/css/print.css` | Layout and components, using theme tokens only |
 | `src/themes/dm.css` | The theme: every colour, font and spacing value as a CSS token. Change the look here. |
 | `src/fonts/` | WOFF2 subsets (Latin, Latin Extended) of Playfair Display, Lora and Source Code Pro from Fontsource, with their licences |
-| `build.mjs` | Bundles the modules, inlines CSS, fonts, examples and the format spec, computes the CSP hash |
+| `build.mjs` | Bundles the modules, inlines CSS, fonts, examples, the format spec and the skill, computes the CSP hash, writes `dist/skill/SKILL.md` |
+| `docs/SKILL.template.md` | The AI skill's instructions; the build fills in the version, the car-concept example and `docs/FORMAT.md` |
 | `VERSION` | The app version, shown in Help and checked against release tags |
 | `examples/` | Two canonical examples, plus `messy-input.md` and its expected canonical output |
 
@@ -122,7 +125,7 @@ The app is published to GitHub Pages **only for full releases**: pushes to `main
 1. Set the version in [`VERSION`](VERSION) (e.g. `1.1.0`, or `1.1.0-rc.1` for a release candidate), run `node build.mjs`, and merge that through a pull request.
 2. On GitHub, *Releases → Draft a new release*, create the tag `v` + that version on `main`, and publish it:
    - **Release candidate** (`v1.1.0-rc.1`): tick *Set as a pre-release*. Nothing is deployed; download `dist/zwicky.html` from the tag to test it.
-   - **Release** (`v1.1.0`): the [Pages workflow](.github/workflows/pages.yml) checks that the tag matches `VERSION`, runs the tests, verifies the committed build and deploys it.
+   - **Release** (`v1.1.0`): the [Pages workflow](.github/workflows/pages.yml) checks that the tag matches `VERSION`, runs the tests, verifies the committed build and deploys it, with `SKILL.md` next to the app.
 3. To roll back, run the Pages workflow manually (*Actions → Pages → Run workflow*) with an older tag.
 
 One-time setup, by a repository admin:
