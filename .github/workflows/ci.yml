@@ -23,12 +23,13 @@ jobs:
         run: |
           node build.mjs
           git diff --exit-code -- dist/ || {
-            echo "::error::dist/zwicky.html is out of date. Run 'node build.mjs' and commit the result."
+            echo "::error::dist/ is out of date. Run 'node build.mjs' and commit the result."
             exit 1
           }
 
   browser:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 cannot install Chromium on Ubuntu 26.04 (ubuntu-latest since late 2026)
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5

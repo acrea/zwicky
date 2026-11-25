@@ -519,6 +519,20 @@ await check('coordinates are off by default; the legend is a small box under the
   assert.equal(await page.evaluate(() => document.documentElement.dataset.coords), 'on');
 });
 
+await check('Help downloads the AI skill as SKILL.md', async () => {
+  await page.keyboard.press('Escape');
+  await z(() => document.activeElement && document.activeElement.blur());
+  await page.keyboard.press('?');
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.locator('dialog[open]').getByRole('button', { name: 'Download the AI skill' }).click(),
+  ]);
+  assert.equal(download.suggestedFilename(), 'SKILL.md');
+  const text = await (await download.createReadStream()).toArray().then((c) => Buffer.concat(c).toString('utf8'));
+  assert.equal(text, readFileSync(new URL('../dist/skill/SKILL.md', import.meta.url), 'utf8'));
+  await page.keyboard.press('Escape');
+});
+
 await check('every example opens without a report and saves back byte-identically (apart from updated)', async () => {
   for (const name of ['car-concept.zwicky.md', 'slide-generator.zwicky.md']) {
     const fixture = readFileSync(new URL('../examples/' + name, import.meta.url), 'utf8');
